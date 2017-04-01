@@ -3,7 +3,11 @@ import React, { Component } from 'react';
 class DeviceList extends Component {
   render() {
     return (
-      <pre>Known devices: {JSON.stringify(this.props.devices, null, 4)}</pre>
+      <ul>
+        {Object.keys(this.props.devices).map((device) => (
+          <li key={device} onClick={() => this.props.showDevice(device)}>#{device}</li>
+        ))}
+      </ul>
     );
   }
 }

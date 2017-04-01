@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import logo from './logo.svg';
 import './App.css';
 import DeviceList from '../containers/DeviceList';
+import Device from '../containers/Device';
 
 class App extends Component {
   render() {
@@ -13,6 +14,7 @@ class App extends Component {
         </div>
         <div className="App-content">
           <DeviceList />
+          <Device />
         </div>
       </div>
     );

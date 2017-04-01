@@ -14,7 +14,6 @@ const devices = (state = {}, action) => {
         }
       };
     default:
-      console.warn("Unhandled:", action.type);
       return state
   }
 }
