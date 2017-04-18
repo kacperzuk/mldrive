@@ -13,12 +13,12 @@ import connector from './connector';
 import './index.css';
 
 const store = createStore(reducer);
-new connector(store);
+connector.init(store);
 
 ReactDOM.render(
   <Provider store={store}>
     <MuiThemeProvider>
-      <App />
+      <App/>
     </MuiThemeProvider>
   </Provider>,
   document.getElementById('root')

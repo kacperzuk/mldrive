@@ -6,7 +6,9 @@ const devices = (state = {}, action) => {
       } else {
         return {
           ...state,
-          [action.device_id]: {}
+          [action.device_id]: {
+            id: action.device_id,
+          }
         };
       }
     case 'UPDATE_TELEMETRY':
