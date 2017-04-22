@@ -11,7 +11,7 @@ while true; do
     mosquitto_pub -t 1/telemetry/enginePower -m 3
     mosquitto_pub -t 1/telemetry/steeringAngle -m 3
     mosquitto_pub -t 1/telemetry/voltage/battery -m 7.2
-    mosquitto_pub -t 1/telemetry/voltage/cell1 -m 3.6
+    mosquitto_pub -t 1/telemetry/voltage/cell1 -m 3.1
     mosquitto_pub -t 1/telemetry/voltage/cell2 -m 4.1
     mosquitto_pub -t 1/telemetry/voltage/3v3bus -m 3.4
     mosquitto_pub -t 1/telemetry/voltage/vcc -m 5.1
