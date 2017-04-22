@@ -1,18 +1,47 @@
 import React, { Component } from 'react';
-import GaugeAnimated from 'gauge-animated';
+import './Gauge.css';
 
 class Gauge extends Component {
-  componentDidMount() {
-    this.gauge = new GaugeAnimated(this.div, this.props);
-    this.gauge.setTarget(this.props.value);
-  }
-  componentDidUpdate(prevProps) {
-    if (prevProps.value !== this.props.value) {
-      this.gauge.setTarget(this.props.value);
-    }
-  }
   render() {
-    return <div ref={(ref) => { this.div = ref }} />;
+    const goodBgColor = "#7EBD77",
+          warnBgColor = "#E7D992",
+          dangBgColor = "#E79692";
+
+    let bgColor = goodBgColor;
+    if(this.props.value > this.props.danger) {
+      bgColor = dangBgColor;
+    } else if (this.props.value > this.props.warning) {
+      bgColor = warnBgColor;
+
+    }
+
+    return <div style={
+      {
+        textAlign: "center",
+        width: "140px",
+        padding: "10px 0",
+        display: "inline-block",
+        margin: "10px",
+        backgroundColor: bgColor
+      }}>
+        <div className="capitalize-first" style={
+          {
+            color: "white",
+            fontSize: "0.8rem"
+          }
+        }>
+        {this.props.name}
+        </div>
+        <div style={
+          {
+            color: "white",
+            opacity: 0.8,
+            fontSize: "1.2rem"
+          }
+        }>
+        {this.props.value}{this.props.unit}
+        </div>
+      </div>;
   }
 }
 
