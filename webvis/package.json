@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "exports-loader": "^0.6.4",
     "gauge-animated": "^0.4.0",
+    "jsmpeglive": "^1.0.3",
     "material-ui": "^0.17.1",
     "mqtt": "^2.5.1",
     "react": "^15.4.2",

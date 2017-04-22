@@ -15,6 +15,8 @@ class Connector {
     const t = topic.split("/");
     if(t[0] === "device_beacon") {
       this.handleDeviceBeacon(t, payload);
+    } else if (t[1] === "camera_stream") {
+      this.handleCameraStream(t, payload);
     } else if (t[1] === "telemetry") {
       this.handleDeviceTelemetry(t, payload);
     } else {
@@ -23,8 +25,16 @@ class Connector {
   }
   handleDeviceBeacon(topic, payload) {
     this.client.subscribe(`${payload}/telemetry/#`);
+    this.client.subscribe(`${payload}/camera_stream/#`);
     if(this.store) {
       this.store.dispatch(newDevice(payload.toString()));
+    }
+  }
+  handleCameraStream(topic, payload) {
+    const device_id = topic[0];
+    const stream = topic.slice(1).join("/");
+    if(this.store) {
+      this.store.dispatch(updateTelemetry(device_id, stream, payload.toString()));
     }
   }
   handleDeviceTelemetry(topic, payload) {

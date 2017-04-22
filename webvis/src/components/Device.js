@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import Gauge from './Gauge';
-import DeviceControl from '../containers/DeviceControl';
+import DeviceConfig from '../containers/DeviceConfig';
+import DeviceCams from './DeviceCams';
 
 class Device extends Component {
   getVoltages() {
@@ -151,11 +152,16 @@ class Device extends Component {
 
     return (
       <div>
+      <h1>Telemetry</h1>
         {this.getVoltages()}
         {this.getTemps()}
         {this.getAccels()}
         {this.getMisc()}
-        <DeviceControl device={this.props.device} />
+      <h1>Config</h1>
+        <DeviceConfig device={this.props.device} />
+      <h1>Cams</h1>
+        <DeviceCams device={this.props.device} />
+      <h1>Debug</h1>
         <pre>{JSON.stringify(this.props.device, null, 4)}</pre>
       </div>
     );
