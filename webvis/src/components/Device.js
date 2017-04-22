@@ -10,36 +10,38 @@ class Device extends Component {
       {
         name: "Cell1",
         value: parseFloat(this.props.device["voltage/cell1"]).toFixed(1),
-        danger: 4.2,
-        warn: 3.9,
+        dangerAbove: 4,
+        warningAbove: 3.9,
+        warningBelow: 3.5,
+        dangerBelow: 3.2,
         unit
       },
       {
         name: "Cell2",
         value: parseFloat(this.props.device["voltage/cell2"]).toFixed(1),
-        danger: 4.2,
-        warn: 3.9,
+        dangerAbove: 4.2,
+        warningAbove: 3.9,
         unit
       },
       {
         name: "Battery",
         value: parseFloat(this.props.device["voltage/battery"]).toFixed(1),
-        danger: 2*4.2,
-        warn: 2*3.9,
+        dangerAbove: 2*4.2,
+        warningAbove: 2*3.9,
         unit
       },
       {
         name: "3v3 bus",
         value: parseFloat(this.props.device["voltage/3v3bus"]).toFixed(1),
-        danger: 4,
-        warn: 3.5,
+        dangerAbove: 4,
+        warningAbove: 3.5,
         unit
       },
       {
         name: "Vcc",
         value: parseFloat(this.props.device["voltage/vcc"]).toFixed(1),
-        danger: 6,
-        warn: 5.5,
+        dangerAbove: 6,
+        warningAbove: 5.5,
         unit
       }
     ];
@@ -50,8 +52,10 @@ class Device extends Component {
       {spec.map((s) => <Gauge
           key={s.name}
           value={s.value}
-          danger={s.danger}
-          warn={s.warn}
+          dangerAbove={s.dangerAbove}
+          warningAbove={s.warningAbove}
+          dangerBelow={s.dangerBelow}
+          warningBelow={s.warningBelow}
           name={s.name}
           unit={s.unit} />
       )}
@@ -63,29 +67,29 @@ class Device extends Component {
       {
         name: "Ambient",
         value: parseFloat(this.props.device["temperature/ambient"]).toFixed(1),
-        danger: 60,
-        warn: 40,
+        dangerAbove: 60,
+        warningAbove: 40,
         unit
       },
       {
         name: "Motor",
         value: parseFloat(this.props.device["temperature/motor"]).toFixed(1),
-        danger: 60,
-        warn: 40,
+        dangerAbove: 60,
+        warningAbove: 40,
         unit
       },
       {
         name: "ESC",
         value: parseFloat(this.props.device["temperature/esc"]).toFixed(1),
-        danger: 60,
-        warn: 40,
+        dangerAbove: 60,
+        warningAbove: 40,
         unit
       },
       {
         name: "Battery",
         value: parseFloat(this.props.device["temperature/battery"]).toFixed(1),
-        danger: 60,
-        warn: 40,
+        dangerAbove: 60,
+        warningAbove: 40,
         unit
       },
     ];
@@ -97,22 +101,22 @@ class Device extends Component {
       {
         name: "AccelX",
         value: parseFloat(this.props.device["accelX"]).toFixed(1),
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit
       },
       {
         name: "AccelY",
         value: parseFloat(this.props.device["accelY"]).toFixed(1),
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit
       },
       {
         name: "AccelZ",
         value: parseFloat(this.props.device["accelZ"]).toFixed(1),
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit
       },
     ];
@@ -124,22 +128,22 @@ class Device extends Component {
       {
         name: "Speed",
         value: this.props.device["speed"],
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit
       },
       {
         name: "Engine power",
         value: parseFloat(this.props.device["enginePower"]).toFixed(1),
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit
       },
       {
         name: "Steering Angle",
         value: parseFloat(this.props.device["steeringAngle"]).toFixed(1),
-        danger: Infinity,
-        warn: Infinity,
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
         unit: "°"
       },
     ];

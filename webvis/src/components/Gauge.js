@@ -8,11 +8,10 @@ class Gauge extends Component {
           dangBgColor = "#E79692";
 
     let bgColor = goodBgColor;
-    if(this.props.value > this.props.danger) {
+    if(this.props.value > this.props.dangerAbove || this.props.value < this.props.dangerBelow) {
       bgColor = dangBgColor;
-    } else if (this.props.value > this.props.warning) {
+    } else if (this.props.value > this.props.warningAbove || this.props.value < this.props.warningBelow) {
       bgColor = warnBgColor;
-
     }
 
     return <div style={
