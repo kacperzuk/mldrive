@@ -9,7 +9,7 @@ class Device extends Component {
     const voltages = [
       {
         name: "Cell1",
-        value: parseFloat(this.props.device["voltage/cell1"]).toFixed(1),
+        value: (parseFloat(this.props.device["voltage/cell1"])/1000).toFixed(2),
         dangerAbove: 4,
         warningAbove: 3.9,
         warningBelow: 3.5,
@@ -18,28 +18,28 @@ class Device extends Component {
       },
       {
         name: "Cell2",
-        value: parseFloat(this.props.device["voltage/cell2"]).toFixed(1),
+        value: (parseFloat(this.props.device["voltage/cell2"])/1000).toFixed(2),
         dangerAbove: 4.2,
         warningAbove: 3.9,
         unit
       },
       {
         name: "Battery",
-        value: parseFloat(this.props.device["voltage/battery"]).toFixed(1),
+        value: (parseFloat(this.props.device["voltage/battery"])/1000).toFixed(2),
         dangerAbove: 2*4.2,
         warningAbove: 2*3.9,
         unit
       },
       {
         name: "3v3 bus",
-        value: parseFloat(this.props.device["voltage/3v3bus"]).toFixed(1),
+        value: (parseFloat(this.props.device["voltage/3v3bus"])/1000).toFixed(2),
         dangerAbove: 4,
         warningAbove: 3.5,
         unit
       },
       {
         name: "Vcc",
-        value: parseFloat(this.props.device["voltage/vcc"]).toFixed(1),
+        value: (parseFloat(this.props.device["voltage/vcc"])/1000).toFixed(2),
         dangerAbove: 6,
         warningAbove: 5.5,
         unit
@@ -100,21 +100,21 @@ class Device extends Component {
     const accels = [
       {
         name: "AccelX",
-        value: parseFloat(this.props.device["accelX"]).toFixed(1),
+        value: (parseFloat(this.props.device["accelX"])/100).toFixed(1),
         dangerAbove: Infinity,
         warningAbove: Infinity,
         unit
       },
       {
         name: "AccelY",
-        value: parseFloat(this.props.device["accelY"]).toFixed(1),
+        value: (parseFloat(this.props.device["accelY"])/100).toFixed(1),
         dangerAbove: Infinity,
         warningAbove: Infinity,
         unit
       },
       {
         name: "AccelZ",
-        value: parseFloat(this.props.device["accelZ"]).toFixed(1),
+        value: (parseFloat(this.props.device["accelZ"])/100).toFixed(1),
         dangerAbove: Infinity,
         warningAbove: Infinity,
         unit
