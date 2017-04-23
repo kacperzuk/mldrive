@@ -9,11 +9,13 @@ injectTapEventPlugin();
 import App from './components/App';
 import reducer from './reducers';
 import connector from './connector';
+import controller from './controller';
 
 import './index.css';
 
 const store = createStore(reducer);
 connector.init(store);
+controller.init(store);
 
 ReactDOM.render(
   <Provider store={store}>

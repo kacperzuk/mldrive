@@ -2,7 +2,7 @@ import MQTT from 'mqtt';
 import { newDevice, updateTelemetry } from './actions';
 
 class Connector {
-  constructor(store) {
+  constructor() {
     this.client = MQTT.connect("ws://localhost:9001");
     this.client.subscribe("device_beacon");
     this.client.on("message", this.handleMessage.bind(this));

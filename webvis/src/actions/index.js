@@ -12,3 +12,8 @@ export const setVisibleDevice = (device_id) => ({
   type: 'SET_VISIBLE_DEVICE',
   device_id
 });
+
+export const updateGamepad = (steering, throttle, debug) => ({
+  type: 'UPDATE_GAMEPAD',
+  steering, throttle, debug
+});

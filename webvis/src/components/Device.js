@@ -167,6 +167,7 @@ class Device extends Component {
         <DeviceCams device={this.props.device} />
       <h1>Debug</h1>
         <pre>{JSON.stringify(this.props.device, null, 4)}</pre>
+        <pre>{JSON.stringify(this.props.gamepad, null, 4)}</pre>
       </div>
     );
   }
