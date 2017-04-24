@@ -174,19 +174,24 @@ if not cap.isOpened():
 
 rv, img = cap.read()
 sys.stderr.write("Frame size: %dx%d\n" % (img.shape[1], img.shape[0]))
+w = int(sys.argv[2])
+h = int(sys.argv[3])
+sys.stderr.write("Resize to: %dx%d\n" % (w,h))
 while True:
     rv, img = cap.read()
     if not rv:
         time.sleep(0.01)
         continue
 
-    img = cv2.resize(img, (640, 360))
+    img = cv2.resize(img, (w, h))
 
     lines, debug = detect_lane(img)
     if lines:
         img = draw_lines(img, lines)
     else:
         img = debug
+    if len(img.shape) != 3:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if img is not None:
         if sys.stdout.isatty():
             cv2.imshow('image', img)
