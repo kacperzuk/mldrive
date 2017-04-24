@@ -31,7 +31,7 @@ class DeviceCams extends Component {
     }
 
     return (
-      <canvas width={320} height={240} ref={this.handleCanvasRef.bind(this)} />
+      <canvas width={640} height={360} ref={this.handleCanvasRef.bind(this)} />
     );
   }
 }
