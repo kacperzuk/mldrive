@@ -1,5 +1,5 @@
 import { connect } from 'react-redux';
-import { updateTelemetry } from '../actions';
+import { updateForm, clearForm } from '../actions';
 import DeviceConfigView from '../components/DeviceConfig';
 
 import connector from '../connector';
@@ -10,46 +10,28 @@ const mapStateToProps = (state, ownProps) => ({
 });
 
 const mapDispatchToProps = (dispatch, ownProps) => ({
-  setDebug(debug) {
+  setConf(topic, val) {
     const device_id = ownProps.device.id;
-    connector.sendOnce(`${device_id}/conf/debug`, debug ? 1 : 0);
-    dispatch(updateTelemetry(device_id, "conf/debug", debug ? 1 : 0));
+    dispatch(updateForm(device_id, `conf/${topic}`, val));
   },
-  setThrottleDelay(val) {
-    const device_id = ownProps.device.id,
-          delay = itom(val);
-    connector.sendOnce(`${device_id}/conf/throttle_delay`, delay);
-    dispatch(updateTelemetry(device_id, "conf/throttle_delay", val));
+  submit() {
+    const device_id = ownProps.device.id;
+    Object.keys(ownProps.device).filter((k) => k.indexOf("conf") === 0).forEach((topic) => {
+      let val = ownProps.device[topic];
+      if (!isNaN(parseFloat(val)) && isFinite(val)) {
+        val = itom(val);
+      }
+      if(topic.indexOf("conf/vision/") === 0) {
+        connector.sendOnce(`${device_id}/set${topic}`, val);
+      } else {
+        connector.sendOnce(`${device_id}/${topic}`, val);
+      }
+    });
+    dispatch(clearForm(device_id));
   },
-  setThrottleMiddle(val) {
-    const device_id = ownProps.device.id,
-          middle = itom(val);
-    connector.sendOnce(`${device_id}/conf/throttle_middle`, middle);
-    dispatch(updateTelemetry(device_id, "conf/throttle_middle", val));
-  },
-  setSteeringDelay(val) {
-    const device_id = ownProps.device.id,
-          delay = itom(val);
-    connector.sendOnce(`${device_id}/conf/steering_delay`, delay);
-    dispatch(updateTelemetry(device_id, "conf/steering_delay", val));
-  },
-  setSteeringMin(val) {
-    const device_id = ownProps.device.id,
-          min = itom(val);
-    connector.sendOnce(`${device_id}/conf/steering_min`, min);
-    dispatch(updateTelemetry(device_id, "conf/steering_min", val));
-  },
-  setSteeringMiddle(val) {
-    const device_id = ownProps.device.id,
-          middle = itom(val);
-    connector.sendOnce(`${device_id}/conf/steering_middle`, middle);
-    dispatch(updateTelemetry(device_id, "conf/steering_middle", val));
-  },
-  setSteeringMax(val) {
-    const device_id = ownProps.device.id,
-          max = itom(val);
-    connector.sendOnce(`${device_id}/conf/steering_max`, max);
-    dispatch(updateTelemetry(device_id, "conf/steering_max", val));
+  clear() {
+    const device_id = ownProps.device.id;
+    dispatch(clearForm(device_id));
   }
 });
 

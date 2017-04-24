@@ -19,13 +19,16 @@ class Connector {
       this.handleCameraStream(t, payload);
     } else if (t[1] === "telemetry") {
       this.handleDeviceTelemetry(t, payload);
+    } else if (t[1] === "conf") {
+      this.handleDeviceConf(t, payload);
+    } else if (t[1] === "setconf") {
+      // ignored
     } else {
       console.warn("Unhandled MQTT topic:", topic);
     }
   }
   handleDeviceBeacon(topic, payload) {
-    this.client.subscribe(`${payload}/telemetry/#`);
-    this.client.subscribe(`${payload}/camera_stream/#`);
+    this.client.subscribe(`${payload}/#`);
     if(this.store) {
       this.store.dispatch(newDevice(payload.toString()));
     }
@@ -44,7 +47,15 @@ class Connector {
       this.store.dispatch(updateTelemetry(device_id, telemetry, payload.toString()));
     }
   }
+  handleDeviceConf(topic, payload) {
+    const device_id = topic[0];
+    const conf = topic.slice(1).join("/");
+    if(this.store) {
+      this.store.dispatch(updateTelemetry(device_id, conf, payload.toString()));
+    }
+  }
   sendOnce(topic, payload, qos=2) {
+    console.log("Sending to", topic);
     this.client.publish(topic, payload, { qos });
   }
   setSendInterval(topic, payload, interval) {

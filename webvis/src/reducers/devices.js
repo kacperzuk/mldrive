@@ -8,21 +8,43 @@ const devices = (state = {}, action) => {
           ...state,
           [action.device_id]: {
             id: action.device_id,
+            dirty_conf: false
           }
         };
       }
+    case 'UPDATE_FORM':
+      return {
+        ...state,
+        [action.device_id]: {
+          ...state[action.device_id],
+          dirty_conf: true,
+          [action.field]: action.value
+        }
+      };
     case 'UPDATE_TELEMETRY':
-      let n = {
+      if (action.telemetry.indexOf("conf") === 0 && state[action.device_id].dirty_conf) {
+        return state;
+      }
+
+      return {
         ...state,
         [action.device_id]: {
           ...state[action.device_id],
           [action.telemetry]: action.value
         }
       };
-      return n;
+    case 'CLEAR_FORM':
+      return {
+        ...state,
+        [action.device_id]: {
+          ...state[action.device_id],
+          dirty_conf: false
+        }
+      };
+
     default:
-      return state
+      return state;
   }
 }
 
-export default devices
+export default devices;

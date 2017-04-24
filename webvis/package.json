@@ -6,13 +6,15 @@
     "exports-loader": "^0.6.4",
     "gauge-animated": "^0.4.0",
     "jsmpeglive": "^1.0.3",
+    "lodash.debounce": "^4.0.8",
     "material-ui": "^0.17.1",
     "mqtt": "^2.5.1",
     "react": "^15.4.2",
     "react-dom": "^15.4.2",
     "react-redux": "^5.0.3",
     "react-tap-event-plugin": "^2.0.1",
-    "redux": "^3.6.0"
+    "redux": "^3.6.0",
+    "redux-batched-subscribe": "^0.1.6"
   },
   "devDependencies": {
     "react-scripts": "0.9.5",
