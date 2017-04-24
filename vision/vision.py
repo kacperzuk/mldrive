@@ -3,10 +3,87 @@ import numpy as np
 import math
 import time
 import cv2
+import paho.mqtt.client as mqtt
+from threading import Thread
 
 # must be odd number:
+DEVICE_ID=sys.argv[1]
 CANNY_LOW_THRESHOLD=150
 CANNY_HIGH_THRESHOLD=200
+HOUGH_INTERSECTIONS=20
+HOUGH_MIN_LENGTH=30
+HOUGH_MAX_GAP=100
+# possible: mask, masked, canny, hough, final
+OUTPUT_MODE="final"
+
+mqttc = mqtt.Client()
+mqttc.connect("127.0.0.1", port=1883)
+mqttc.loop_start()
+topic = "%s/setconf/vision/#" % DEVICE_ID
+print(topic)
+mqttc.subscribe(topic)
+
+def on_message(client, userdata, message):
+    global CANNY_LOW_THRESHOLD
+    global CANNY_HIGH_THRESHOLD
+    global OUTPUT_MODE
+    global HOUGH_MAX_GAP
+    global HOUGH_MIN_LENGTH
+    global HOUGH_INTERSECTIONS
+
+    topic = message.topic.split("/")[3:]
+    if topic[0] == "canny":
+        if topic[1] == "low":
+            CANNY_LOW_THRESHOLD = int(message.payload)
+            sys.stderr.write("CANNY_LOW_THRESHOLD=%d\n" % CANNY_LOW_THRESHOLD)
+            return
+        elif topic[1] == "high":
+            CANNY_HIGH_THRESHOLD = int(message.payload)
+            sys.stderr.write("CANNY_HIGH_THRESHOLD=%d\n" % CANNY_HIGH_THRESHOLD)
+            return
+    elif topic[0] == "output_mode":
+        OUTPUT_MODE = message.payload.decode("utf-8")
+        sys.stderr.write("OUTPUT_MODE=%s\n" % OUTPUT_MODE)
+        return
+    elif topic[0] == "hough":
+        if topic[1] == "intersections":
+            HOUGH_INTERSECTIONS = int(message.payload)
+            sys.stderr.write("HOUGH_INTERSECTIONS=%d\n" % HOUGH_INTERSECTIONS)
+            return
+        elif topic[1] == "min_length":
+            HOUGH_MIN_LENGTH = int(message.payload)
+            sys.stderr.write("HOUGH_MIN_LENGTH=%d\n" % HOUGH_MIN_LENGTH)
+            return
+        if topic[1] == "max_gap":
+            HOUGH_MAX_GAP = int(message.payload)
+            sys.stderr.write("HOUGH_MAX_GAP=%d\n" % HOUGH_MAX_GAP)
+            return
+
+    sys.stderr.write("Unhandled MQTT topic: %s\n" % topic.join("/"))
+
+mqttc.on_message = on_message
+
+def dump_conf(mqttc):
+    global CANNY_LOW_THRESHOLD
+    global CANNY_HIGH_THRESHOLD
+    global OUTPUT_MODE
+    global HOUGH_MAX_GAP
+    global HOUGH_MIN_LENGTH
+    global HOUGH_INTERSECTIONS
+    global DEVICE_ID
+
+    prefix = "%s/conf/vision" % DEVICE_ID
+    while True:
+        mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
+        mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
+        mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
+        mqttc.publish("%s/hough/intersections" % prefix, HOUGH_INTERSECTIONS)
+        mqttc.publish("%s/hough/min_length" % prefix, HOUGH_MIN_LENGTH)
+        mqttc.publish("%s/output_mode" % prefix, OUTPUT_MODE)
+        time.sleep(1)
+
+Thread(target=dump_conf, args=(mqttc,)).start()
+
 
 def detect_lane(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -23,13 +100,16 @@ def detect_lane(img):
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
 
-    #return None, mask # show just mask
-    #return None, cv2.bitwise_and(img, mask) # show masked image
+    if OUTPUT_MODE == "mask":
+        return None, mask # show just mask
+    if OUTPUT_MODE == "masked":
+        return None, cv2.bitwise_and(img, mask) # show masked image
 
     img = cv2.Canny(img, CANNY_LOW_THRESHOLD, CANNY_HIGH_THRESHOLD)
-    #return None, img # show canny result
+    if OUTPUT_MODE == "canny":
+        return None, img # show canny result
     img = cv2.bitwise_and(img, mask)
-    line_segments = cv2.HoughLinesP(img, 1, math.pi/180, 20, np.array([]), minLineLength=30, maxLineGap=100)
+    line_segments = cv2.HoughLinesP(img, 1, math.pi/180, HOUGH_INTERSECTIONS, np.array([]), minLineLength=HOUGH_MIN_LENGTH, maxLineGap=HOUGH_MAX_GAP)
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if line_segments is None:
         print("Frame skip - no line segments from HoughLines")
@@ -38,7 +118,8 @@ def detect_lane(img):
     for line in line_segments:
         line = line[0]
         img = cv2.line(img, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
-    #return None, img # show segments
+    if OUTPUT_MODE == "hough":
+        return None, img # show segments
 
     lines = []
     for l in line_segments:
