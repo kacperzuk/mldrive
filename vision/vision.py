@@ -191,9 +191,9 @@ while True:
         img = draw_lines(img, lines)
     else:
         img = debug
-    if len(img.shape) != 3:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if img is not None:
+        if len(img.shape) != 3:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         if sys.stdout.isatty():
             cv2.imshow('image', img)
         else:
