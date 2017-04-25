@@ -168,14 +168,15 @@ def draw_lines(img, lines):
         img = cv2.line(img, p1, p2, (0,255,0), 2)
     return img
 
-cap = cv2.VideoCapture(0)
+w = int(sys.argv[2])
+h = int(sys.argv[3])
+
+cap = cv2.VideoCapture('tcp://0.0.0.0:6000?listen&recv_buffer_size=1024')
 if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
 rv, img = cap.read()
 sys.stderr.write("Frame size: %dx%d\n" % (img.shape[1], img.shape[0]))
-w = int(sys.argv[2])
-h = int(sys.argv[3])
 sys.stderr.write("Resize to: %dx%d\n" % (w,h))
 while True:
     rv, img = cap.read()
