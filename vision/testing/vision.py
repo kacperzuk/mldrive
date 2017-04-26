@@ -10,16 +10,11 @@ from threading import Thread
 CANNY_LOW_THRESHOLD=20
 CANNY_HIGH_THRESHOLD=40
 HOUGH_INTERSECTIONS=20
-HOUGH_MIN_LENGTH=20
+HOUGH_MIN_LENGTH=70
 HOUGH_MAX_GAP=10
 
 def points_to_hesse_normal_form(p1, p2):
-    """
-    https://en.wikipedia.org/wiki/Hesse_normal_form
-
-    It was supposed to allow to compare lines, but it didn't work out.
-    Now it's just used to extrapolate from 2 points to whole frame for drawing.
-    """
+    # https://en.wikipedia.org/wiki/Hesse_normal_form
 
     q,w = p1
     r,t = p2
@@ -46,9 +41,7 @@ def points_to_hesse_normal_form(p1, p2):
     return (A,B,C)
 
 def line_to_points(line, shape):
-    """
-    Turns output of points_to_hesse_normal_form into 2 points covering whole frame.
-    """
+    # Turns output of points_to_hesse_normal_form into 2 points covering whole frame. 
     H,W,d = shape
     A,B,C = line
     if A == 0:
@@ -65,10 +58,10 @@ def generate_mask(img):
     w = img.shape[1]
     h = img.shape[0]
     vertices = np.array([
-      [0, 0.65*h],
-      [0, 0.1*h],
-      [0.6*w, 0.1*h],
-      [0.9*w, 0.65*h]
+      [0.1*w, 0.8*h],
+      [0.3*w, 0.5*h],
+      [0.7*w, 0.5*h],
+      [0.9*w, 0.8*h]
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
     return mask
@@ -92,17 +85,16 @@ def detect_lane(img):
     line_segments = cv2.HoughLinesP(img, 1, math.pi/180, HOUGH_INTERSECTIONS, np.array([]), minLineLength=HOUGH_MIN_LENGTH, maxLineGap=HOUGH_MAX_GAP)
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if line_segments is None:
-        print("Frame skip - no line segments from HoughLines")
         return result
     line_segments = [ l[0] for l in line_segments ]
     result["segments_d"] = line_segments
 
     if len(line_segments) > 2:
-        # merge similar lines
+        # merge similar lines using kmeans clustering
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
-        flags = cv2.KMEANS_PP_CENTERS
+        flags = cv2.KMEANS_RAND_CENTERS
         centers = [ ( (l[0]+l[2])/2, (l[1]+l[3])/2) for l in line_segments ]
-        count = min(4, len(centers))
+        count = min(5, len(centers))
         compactness,labels,centers = cv2.kmeans(np.float32(centers),count,None,criteria,10,flags)
         labels = [ l[0] for l in labels.tolist() ]
         lines = []
@@ -111,43 +103,68 @@ def detect_lane(img):
             b = 0
             c = 0
             d = 0
-            n = 0
+            l = 0
             for j in range(len(labels)):
                 if labels[j] == i:
-                    n += 1
-                    a += line_segments[j][0]
-                    b += line_segments[j][1]
-                    c += line_segments[j][2]
-                    d += line_segments[j][3]
-            lines.append((a/n, b/n, c/n, d/n))
+                    t = line_segments[j]
+                    sl = math.sqrt(math.pow(t[0] - t[2], 2) + math.pow(t[1] - t[3], 2))
+                    l += sl
+                    a += sl*t[0]
+                    b += sl*t[1]
+                    c += sl*t[2]
+                    d += sl*t[3]
+            lines.append((a/l, b/l, c/l, d/l))
     else:
-        return None, img
+        return result
 
     lines = [ points_to_hesse_normal_form((s[0], s[1]), (s[2], s[3])) for s in lines ]
+    # merge lines with angle < math.pi/30
+    # that can be problematic, we should also check something else here
+    for l1 in lines:
+        for l2 in lines:
+            if l1 == l2:
+                continue
+            try:
+                lines.index(l1)
+                lines.index(l2)
+            except ValueError:
+                continue
+            if abs(math.atan2(l1[1], l1[0]) - math.atan2(l2[1], l2[0])) < math.pi/30:
+                l3 = ((l1[0]+l2[0])/2, (l1[1]+l2[1])/2, (l1[2]+l2[2])/2)
+                lines.remove(l1)
+                lines.remove(l2)
+                lines.append(l3)
     lines = [ line_to_points(l, img.shape) for l in lines ]
     lines = [ (l[0][0], l[0][1], l[1][0], l[1][1]) for l in lines ]
     lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
     result["clustered_lines"] = lines
     return result
 
+
 def draw_it(result):
     base = result["original"]
-    base = result["canny_masked"]
+    #base = result["masked"]
     if len(base.shape) != 3:
         base = cv2.cvtColor(base, cv2.COLOR_GRAY2RGB)
-    for line in result["segments_d"]:
-        base = cv2.line(base, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
-    for line in result["clustered_lines"][2:]:
-        p1 = (line[0], line[1])
-        p2 = (line[2], line[3])
-        base = cv2.line(base, p1, p2, (0,0,255), 2)
-    for line in result["clustered_lines"][:2]:
-        p1 = (line[0], line[1])
-        p2 = (line[2], line[3])
-        base = cv2.line(base, p1, p2, (0,255,0), 2)
+    try:
+        for line in result["segments_d"]:
+            base = cv2.line(base, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
+    except KeyError:
+        pass
+    try:
+        for line in result["clustered_lines"][2:]:
+            p1 = (line[0], line[1])
+            p2 = (line[2], line[3])
+            base = cv2.line(base, p1, p2, (0,0,255), 2)
+        for line in result["clustered_lines"][:2]:
+            p1 = (line[0], line[1])
+            p2 = (line[2], line[3])
+            base = cv2.line(base, p1, p2, (0,255,0), 2)
+    except KeyError:
+        print("No clustered_lines :(")
     return base
 
-cap = cv2.VideoCapture('out.mp4')
+cap = cv2.VideoCapture('in.mp4')
 if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
@@ -160,6 +177,7 @@ rv, img = cap.read()
 rv, img = cap.read()
 rv, img = cap.read()
 sys.stderr.write("Frame size: %dx%d\n" % (img.shape[1], img.shape[0]))
+writer = cv2.VideoWriter("out.mp4", cv2.VideoWriter_fourcc('m', 'p', 'g', '1'), 30, (img.shape[1], img.shape[0]))
 while True:
     rv, img = cap.read()
     if not rv:
@@ -169,6 +187,7 @@ while True:
     result = detect_lane(img)
     img = draw_it(result)
     cv2.imshow('image', img)
+    writer.write(img)
     if chr(cv2.waitKey(0)) == 'q':
         break
 
