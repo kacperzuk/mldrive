@@ -47,9 +47,22 @@ def line_to_points(line, shape):
     if A == 0:
         p1 = (0, int(-C/B))
         p2 = (W, int(-C/B))
-    else:
+    elif B == 0:
         p1 = (int(-C/A), 0)
-        p2 = (int(-(B*H+C)/A), H)
+        p2 = (int(-C/A), H)
+    else:
+        ps = [
+            (int(-C/A), 0),
+            (int(-(B*H+C)/A), H),
+            (0, int(-C/B)),
+            (W, int(-(A*W+C)/B))
+        ]
+        r = []
+        for p in ps:
+            if p[0] >= 0 and p[0] <= W and p[1] >= 0 and p[1] <= H:
+                r.append(p)
+        p1, p2 = r[:2]
+
     return (p1, p2)
 
 def generate_mask(img):
@@ -89,53 +102,37 @@ def detect_lane(img):
     line_segments = [ l[0] for l in line_segments ]
     result["segments_d"] = line_segments
 
-    if len(line_segments) > 2:
+    lines = [ points_to_hesse_normal_form((s[0], s[1]), (s[2], s[3])) for s in line_segments ]
+    # merge lines with angle < math.pi/30
+    # that can be problematic, we should also check something else here
+    #for l1 in lines:
+    #    for l2 in lines:
+    #        if l1 == l2:
+    #            continue
+    #        try:
+    #            lines.index(l1)
+    #            lines.index(l2)
+    #        except ValueError:
+    #            continue
+    #        if abs(math.atan2(l1[1], l1[0]) - math.atan2(l2[1], l2[0])) < math.pi/30:
+    #            l3 = ((l1[0]+l2[0])/2, (l1[1]+l2[1])/2, (l1[2]+l2[2])/2)
+    #            lines.remove(l1)
+    #            lines.remove(l2)
+    #            lines.append(l3)
+    lines = [ line_to_points(l, img.shape) for l in lines ]
+    lines = [ (l[0][0], l[0][1], l[1][0], l[1][1]) for l in lines ]
+
+    if len(lines) > 2:
         # merge similar lines using kmeans clustering
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
-        flags = cv2.KMEANS_RAND_CENTERS
-        centers = [ ( (l[0]+l[2])/2, (l[1]+l[3])/2) for l in line_segments ]
-        count = min(5, len(centers))
-        compactness,labels,centers = cv2.kmeans(np.float32(centers),count,None,criteria,10,flags)
-        labels = [ l[0] for l in labels.tolist() ]
-        lines = []
-        for i in range(count):
-            a = 0
-            b = 0
-            c = 0
-            d = 0
-            l = 0
-            for j in range(len(labels)):
-                if labels[j] == i:
-                    t = line_segments[j]
-                    sl = math.sqrt(math.pow(t[0] - t[2], 2) + math.pow(t[1] - t[3], 2))
-                    l += sl
-                    a += sl*t[0]
-                    b += sl*t[1]
-                    c += sl*t[2]
-                    d += sl*t[3]
-            lines.append((a/l, b/l, c/l, d/l))
+        flags = cv2.KMEANS_RANDOM_CENTERS
+        count = min(3, len(lines))
+        compactness,labels,centers = cv2.kmeans(np.float32(lines),count,None,criteria,10,flags)
+        lines = [ c for c in centers ]
     else:
         return result
 
-    lines = [ points_to_hesse_normal_form((s[0], s[1]), (s[2], s[3])) for s in lines ]
-    # merge lines with angle < math.pi/30
-    # that can be problematic, we should also check something else here
-    for l1 in lines:
-        for l2 in lines:
-            if l1 == l2:
-                continue
-            try:
-                lines.index(l1)
-                lines.index(l2)
-            except ValueError:
-                continue
-            if abs(math.atan2(l1[1], l1[0]) - math.atan2(l2[1], l2[0])) < math.pi/30:
-                l3 = ((l1[0]+l2[0])/2, (l1[1]+l2[1])/2, (l1[2]+l2[2])/2)
-                lines.remove(l1)
-                lines.remove(l2)
-                lines.append(l3)
-    lines = [ line_to_points(l, img.shape) for l in lines ]
-    lines = [ (l[0][0], l[0][1], l[1][0], l[1][1]) for l in lines ]
+    #lines = [ (l[0], l[1], l[2], l[3]) for l in lines ]
     lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
     result["clustered_lines"] = lines
     return result
