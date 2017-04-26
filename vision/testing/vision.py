@@ -10,14 +10,12 @@ from threading import Thread
 CANNY_LOW_THRESHOLD=20
 CANNY_HIGH_THRESHOLD=40
 HOUGH_INTERSECTIONS=20
-HOUGH_MIN_LENGTH=70
-HOUGH_MAX_GAP=10
+HOUGH_MIN_LENGTH=60
+HOUGH_MAX_GAP=15
 
-def points_to_hesse_normal_form(p1, p2):
+def segment_to_hesse_normal_form(segment):
     # https://en.wikipedia.org/wiki/Hesse_normal_form
-
-    q,w = p1
-    r,t = p2
+    q,w,r,t = segment
 
     if t != w:
         A = 1
@@ -41,15 +39,15 @@ def points_to_hesse_normal_form(p1, p2):
     return (A,B,C)
 
 def line_to_points(line, shape):
-    # Turns output of points_to_hesse_normal_form into 2 points covering whole frame. 
+    # Turns output of segment_to_hesse_normal_form into 2 points covering whole frame. 
     H,W,d = shape
     A,B,C = line
     if A == 0:
-        p1 = (0, int(-C/B))
-        p2 = (W, int(-C/B))
+        q, w = (0, int(-C/B))
+        r, t = (W, int(-C/B))
     elif B == 0:
-        p1 = (int(-C/A), 0)
-        p2 = (int(-C/A), H)
+        q, w = (int(-C/A), 0)
+        r, t = (int(-C/A), H)
     else:
         ps = [
             (int(-C/A), 0),
@@ -57,24 +55,40 @@ def line_to_points(line, shape):
             (0, int(-C/B)),
             (W, int(-(A*W+C)/B))
         ]
-        r = []
+        res = []
         for p in ps:
             if p[0] >= 0 and p[0] <= W and p[1] >= 0 and p[1] <= H:
-                r.append(p)
-        p1, p2 = r[:2]
+                res.append(p)
+        q, w = res[0]
+        r, t = res[1]
 
-    return (p1, p2)
+    return (q, w, r, t)
 
 def generate_mask(img):
     mask = np.zeros_like(img)
     ignore_mask_color = 255
     w = img.shape[1]
     h = img.shape[0]
+    # behind
+    #vertices = np.array([
+    #  [0.1*w, 0.8*h],
+    #  [0.3*w, 0.5*h],
+    #  [0.7*w, 0.5*h],
+    #  [0.9*w, 0.8*h]
+    #], np.int32)
+    # behind offset
+    #vertices = np.array([
+    #  [0.1*w, 0.5*h],
+    #  [0.2*w, 0.1*h],
+    #  [0.7*w, 0.1*h],
+    #  [0.8*w, 0.5*h]
+    #], np.int32)
+    # front angled
     vertices = np.array([
-      [0.1*w, 0.8*h],
-      [0.3*w, 0.5*h],
-      [0.7*w, 0.5*h],
-      [0.9*w, 0.8*h]
+      [0.0*w, 0.7*h],
+      [0.2*w, 0.2*h],
+      [0.9*w, 0.1*h],
+      [1.0*w, 0.7*h]
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
     return mask
@@ -102,37 +116,20 @@ def detect_lane(img):
     line_segments = [ l[0] for l in line_segments ]
     result["segments_d"] = line_segments
 
-    lines = [ points_to_hesse_normal_form((s[0], s[1]), (s[2], s[3])) for s in line_segments ]
-    # merge lines with angle < math.pi/30
-    # that can be problematic, we should also check something else here
-    #for l1 in lines:
-    #    for l2 in lines:
-    #        if l1 == l2:
-    #            continue
-    #        try:
-    #            lines.index(l1)
-    #            lines.index(l2)
-    #        except ValueError:
-    #            continue
-    #        if abs(math.atan2(l1[1], l1[0]) - math.atan2(l2[1], l2[0])) < math.pi/30:
-    #            l3 = ((l1[0]+l2[0])/2, (l1[1]+l2[1])/2, (l1[2]+l2[2])/2)
-    #            lines.remove(l1)
-    #            lines.remove(l2)
-    #            lines.append(l3)
+    # extrapolate segments to frame-long lines
+    lines = [ segment_to_hesse_normal_form(s) for s in line_segments ]
     lines = [ line_to_points(l, img.shape) for l in lines ]
-    lines = [ (l[0][0], l[0][1], l[1][0], l[1][1]) for l in lines ]
 
     if len(lines) > 2:
         # merge similar lines using kmeans clustering
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
         count = min(3, len(lines))
-        compactness,labels,centers = cv2.kmeans(np.float32(lines),count,None,criteria,10,flags)
-        lines = [ c for c in centers ]
+        compactness,labels,lines = cv2.kmeans(np.float32(lines),count,None,criteria,10,flags)
     else:
         return result
 
-    #lines = [ (l[0], l[1], l[2], l[3]) for l in lines ]
+    # we prefer vertical lines
     lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
     result["clustered_lines"] = lines
     return result
@@ -166,26 +163,17 @@ if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
 rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
-rv, img = cap.read()
 sys.stderr.write("Frame size: %dx%d\n" % (img.shape[1], img.shape[0]))
-writer = cv2.VideoWriter("out.mp4", cv2.VideoWriter_fourcc('m', 'p', 'g', '1'), 30, (img.shape[1], img.shape[0]))
+writer = cv2.VideoWriter("out.mp4", cv2.VideoWriter_fourcc('x', '2', '6', '4'), 30, (img.shape[1], img.shape[0]))
 while True:
     rv, img = cap.read()
     if not rv:
-        time.sleep(0.01)
         continue
-
     result = detect_lane(img)
     img = draw_it(result)
     cv2.imshow('image', img)
     writer.write(img)
-    if chr(cv2.waitKey(0)) == 'q':
+    if chr(cv2.waitKey(1000//30)) == 'q':
         break
 
 cv2.destroyAllWindows()
