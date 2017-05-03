@@ -26,7 +26,6 @@ class DeviceCams extends Component {
     return prevProps.device["camera_stream/0"] !== this.props.device["camera_stream/0"];
   }
   render() {
-
     if(!this.props.device["camera_stream/0"]) {
       return null;
     }

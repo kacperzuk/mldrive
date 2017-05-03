@@ -66,32 +66,32 @@ class Device extends Component {
     const temps = [
       {
         name: "Ambient",
-        value: parseFloat(this.props.device["temperature/ambient"]).toFixed(1),
+        value: (parseFloat(this.props.device["temperature/ambient"])/10).toFixed(1),
         dangerAbove: 60,
         warningAbove: 40,
         unit
       },
       {
-        name: "Motor",
-        value: parseFloat(this.props.device["temperature/motor"]).toFixed(1),
+        name: "Engine",
+        value: (parseFloat(this.props.device["temperature/engine"])/10).toFixed(1),
         dangerAbove: 60,
         warningAbove: 40,
         unit
       },
-      {
-        name: "ESC",
-        value: parseFloat(this.props.device["temperature/esc"]).toFixed(1),
-        dangerAbove: 60,
-        warningAbove: 40,
-        unit
-      },
-      {
-        name: "Battery",
-        value: parseFloat(this.props.device["temperature/battery"]).toFixed(1),
-        dangerAbove: 60,
-        warningAbove: 40,
-        unit
-      },
+      //{
+      //  name: "ESC",
+      //  value: parseFloat(this.props.device["temperature/esc"]).toFixed(1),
+      //  dangerAbove: 60,
+      //  warningAbove: 40,
+      //  unit
+      //},
+      //{
+      //  name: "Battery",
+      //  value: parseFloat(this.props.device["temperature/battery"]).toFixed(1),
+      //  dangerAbove: 60,
+      //  warningAbove: 40,
+      //  unit
+      //},
     ];
     return this.getRow(temps);
   }
