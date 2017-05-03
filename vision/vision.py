@@ -15,13 +15,11 @@ HOUGH_MIN_LENGTH=30
 HOUGH_MAX_GAP=100
 # possible: mask, masked, canny, hough, final
 OUTPUT_MODE="final"
+# FIXME: add to MQTT
+LANE_DETECT_HEIGHT=150
+LINE_MERGE_ANGLE_DEGREES=10
 
 mqttc = mqtt.Client()
-mqttc.connect("127.0.0.1", port=1883)
-mqttc.loop_start()
-topic = "%s/setconf/vision/#" % DEVICE_ID
-print(topic)
-mqttc.subscribe(topic)
 
 def on_message(client, userdata, message):
     global CANNY_LOW_THRESHOLD
@@ -30,6 +28,7 @@ def on_message(client, userdata, message):
     global HOUGH_MAX_GAP
     global HOUGH_MIN_LENGTH
     global HOUGH_INTERSECTIONS
+    global LANE_DETECT_HEIGHT
 
     topic = message.topic.split("/")[3:]
     if topic[0] == "canny":
@@ -58,10 +57,24 @@ def on_message(client, userdata, message):
             HOUGH_MAX_GAP = int(message.payload)
             sys.stderr.write("HOUGH_MAX_GAP=%d\n" % HOUGH_MAX_GAP)
             return
+    elif topic[0] == "lane_detect_height":
+        LANE_DETECT_HEIGHT = int(message.payload)
+        sys.stderr.write("LANE_DETECT_HEIGHT=%d\n" % LANE_DETECT_HEIGHT)
+        return
+    elif topic[0] == "line_merge_angle":
+        LINE_MERGE_ANGLE_DEGREES = int(message.payload)
+        sys.stderr.write("LINE_MERGE_ANGLE_DEGREES=%d\n" % LINE_MERGE_ANGLE_DEGREES)
+        return
+    sys.stderr.write("Unhandled MQTT topic: %s\n" % "/".join(topic))
 
-    sys.stderr.write("Unhandled MQTT topic: %s\n" % topic.join("/"))
+def on_connect(client, userdata, flags, rc):
+    topic = "%s/setconf/vision/#" % DEVICE_ID
+    client.subscribe(topic)
 
 mqttc.on_message = on_message
+mqttc.on_connect = on_connect
+mqttc.connect_async("127.0.0.1", port=1883)
+mqttc.loop_start()
 
 def dump_conf(mqttc):
     global CANNY_LOW_THRESHOLD
@@ -70,103 +83,245 @@ def dump_conf(mqttc):
     global HOUGH_MAX_GAP
     global HOUGH_MIN_LENGTH
     global HOUGH_INTERSECTIONS
+    global LANE_DETECT_HEIGHT
+    global LINE_MERGE_ANGLE_DEGREES
     global DEVICE_ID
 
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
+        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://127.0.0.1:8084")
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
         mqttc.publish("%s/hough/intersections" % prefix, HOUGH_INTERSECTIONS)
         mqttc.publish("%s/hough/min_length" % prefix, HOUGH_MIN_LENGTH)
         mqttc.publish("%s/output_mode" % prefix, OUTPUT_MODE)
+        mqttc.publish("%s/lane_detect_height" % prefix, LANE_DETECT_HEIGHT)
+        mqttc.publish("%s/line_merge_angle" % prefix, LINE_MERGE_ANGLE_DEGREES)
         time.sleep(1)
 
 Thread(target=dump_conf, args=(mqttc,)).start()
 
+def line_angle(l):
+    return math.atan2(l[0], l[1])
 
-def detect_lane(img):
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+def segment_to_hesse_normal_form(segment):
+    # https://en.wikipedia.org/wiki/Hesse_normal_form
+    q,w,r,t = segment
 
+    if t != w:
+        A = 1
+        B = (q-r)/(t-w)
+        C = w*(r-q)/(t-w) - q
+    elif q != r:
+        A = (t-w)/(q-r)
+        B = 1
+        C = q*(w-t)/(q-r) - w
+    else:
+        raise Exception("Same points")
+
+    u = math.sqrt(A*A+B*B)
+    if C > 0:
+      u = -1
+
+    A /= u
+    B /= u
+    C /= u
+
+    return (A,B,C)
+
+def intersection_point(l1, l2):
+    A,B,C = l1
+    D,E,F = l2
+    if A != 0 and (E - D*B/A) != 0:
+        y = (D*C/A - F)/(E - D*B/A)
+        x = -(B*y + C)/A
+    elif (D - E*A/B) != 0:
+        x = (E*C/B - F)/(D - E*A/B)
+        y = -(C + A*x)/B
+    else:
+        return None # parallel lines
+    return (int(x),int(y))
+
+def line_to_points(line, shape):
+    # Turns output of segment_to_hesse_normal_form into 2 points covering whole frame.
+    H,W,d = shape
+    A,B,C = line
+    if A == 0:
+        q, w = (0, int(-C/B))
+        r, t = (W, int(-C/B))
+    elif B == 0:
+        q, w = (int(-C/A), 0)
+        r, t = (int(-C/A), H)
+    else:
+        ps = [
+            (int(-C/A), 0),
+            (int(-(B*H+C)/A), H),
+            (0, int(-C/B)),
+            (W, int(-(A*W+C)/B))
+        ]
+        res = []
+        for p in ps:
+            if p[0] >= 0 and p[0] <= W and p[1] >= 0 and p[1] <= H:
+                res.append(p)
+        q, w = res[0]
+        r, t = res[1]
+
+    # make sure the first point is below the second
+    if w < t:
+        return (r, t, q, w)
+    else:
+        return (q, w, r, t)
+
+def generate_mask(img):
     mask = np.zeros_like(img)
     ignore_mask_color = 255
     w = img.shape[1]
     h = img.shape[0]
+    # behind
+    #vertices = np.array([
+    #  [0.6*w, 0.6*h],
+    #  [0.4*w, 0.6*h],
+    #  [0.1*w, 0.8*h],
+    #  [0.3*w, 0.5*h],
+    #  [0.7*w, 0.5*h],
+    #  [0.9*w, 0.8*h]
+    #], np.int32)
+    # behind offset
+    #vertices = np.array([
+    #  [0.1*w, 0.5*h],
+    #  [0.2*w, 0.1*h],
+    #  [0.7*w, 0.1*h],
+    #  [0.8*w, 0.5*h]
+    #], np.int32)
+    # front angled
     vertices = np.array([
-      [0.1*w, 0.9*h],
-      [0.2*w, 0.4*h],
-      [0.8*w, 0.4*h],
-      [0.9*w, 0.9*h]
+      [0.0*w, 0.7*h],
+      [0.2*w, 0.2*h],
+      [0.9*w, 0.1*h],
+      [1.0*w, 0.7*h]
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
+    return mask
 
-    if OUTPUT_MODE == "mask":
-        return None, mask # show just mask
-    if OUTPUT_MODE == "masked":
-        return None, cv2.bitwise_and(img, mask) # show masked image
+def detect_lane(img):
+    result = {
+        "original": img.copy()
+    }
 
+    # these algorithms only work with Gray unfortunately
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    result["gray"] = img.copy()
+
+    mask = generate_mask(img)
+    result["mask"] = mask.copy()
+    result["masked"] = cv2.bitwise_and(img, mask)
     img = cv2.Canny(img, CANNY_LOW_THRESHOLD, CANNY_HIGH_THRESHOLD)
-    if OUTPUT_MODE == "canny":
-        return None, img # show canny result
+    result["canny"] = img.copy()
     img = cv2.bitwise_and(img, mask)
+    result["canny_masked"] = img.copy()
     line_segments = cv2.HoughLinesP(img, 1, math.pi/180, HOUGH_INTERSECTIONS, np.array([]), minLineLength=HOUGH_MIN_LENGTH, maxLineGap=HOUGH_MAX_GAP)
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if line_segments is None:
-        print("Frame skip - no line segments from HoughLines")
-        return None, img
+        return result
+    line_segments = [ l[0] for l in line_segments ]
+    result["segments"] = line_segments
 
-    for line in line_segments:
-        line = line[0]
-        img = cv2.line(img, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
-    if OUTPUT_MODE == "hough":
-        return None, img # show segments
-
-    lines = []
-    for l in line_segments:
-        l = l[0]
-        if l[2] - l[0] == 0:
-            continue
-        a = (l[3] - l[1])/(l[2] - l[0])
-        b = l[1] - a*l[0]
-        lines.append([a, b])
+    # extrapolate segments to frame-long lines
+    lines = [ segment_to_hesse_normal_form(s) for s in line_segments ]
+    lines = [ line_to_points(l, img.shape) for l in lines ]
+    result["lines"] = line_segments
 
     if len(lines) > 2:
-        # merge similar lines
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+        # merge similar lines using kmeans clustering
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
-        compactness,labels,centers = cv2.kmeans(np.array(lines, np.float32),min(4,len(lines)),None,criteria,10,flags)
-        if centers is not None:
-            lines = centers
+        compactness,labels,lines = cv2.kmeans(np.float32(lines),3,None,criteria,10,flags)
+    else:
+        return result
 
-    if lines is None:
-        print("Frame skip - no lines :(")
-        for line in line_segments:
-            line = line[0]
-            img = cv2.line(img, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
-        return None, img
+    # we prefer vertical lines
+    lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
+    result["clustered_lines"] = lines
+    if len(lines) > 1:
+        h = (0,1,-LANE_DETECT_HEIGHT)
+        l1 = lines[0]
+        l2 = lines[1]
+        # make sure the first line is the left one
+        if l1[0] > l2[0]:
+            l1 = lines[1]
+            l2 = lines[0]
 
-    plines = []
-    for line in lines:
-        a = line[0]
-        b = line[1]
-        if a == 0:
-            p1 = (0, int(b))
-            p2 = (img.shape[1], int(b))
-        else:
-            try:
-                p1 = (int((img.shape[0]*0.3-b)/a), int(img.shape[0]*0.3))
-                p2 = (int((img.shape[0]-b)/a), img.shape[0])
-            except OverflowError:
-                return None, None
-        plines.append((p1,p2))
-    return plines, None
+        l1 = segment_to_hesse_normal_form(l1)
+        l2 = segment_to_hesse_normal_form(l2)
+        p1 = intersection_point(l1, h)
+        p2 = intersection_point(l2, h)
+        if p1 is not None and p2 is not None:
+            result["intersections"] = ( p1,p2, line_to_points(h, img.shape))
+            result["center"] = ((p1[0] + p2[0])//2, (p1[1] + p2[1])//2)
+    return result
 
-def draw_lines(img, lines):
-    for line in lines:
-        p1 = line[0]
-        p2 = line[1]
-        img = cv2.line(img, p1, p2, (0,255,0), 2)
+def draw_direction(img, center):
+    c = img.shape[1]//2
+    x = center[0]
+    y = center[1]
+
+    p1 = (x, y+15)
+    p2 = (c, y+15)
+    img = cv2.line(img, p1, p2, (0, 255, 255), 3)
+    if x > c:
+        p1 = (c+5,y+10)
+        img = cv2.line(img, p1, p2, (0, 255, 255), 3)
+        p1 = (c+5,y+20)
+        img = cv2.line(img, p1, p2, (0, 255, 255), 3)
+    else:
+        p1 = (c-5,y+10)
+        img = cv2.line(img, p1, p2, (0, 255, 255), 3)
+        p1 = (c-5,y+20)
+        img = cv2.line(img, p1, p2, (0, 255, 255), 3)
     return img
+
+def draw_segments(img, segments):
+    if len(img.shape) != 3:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    try:
+        for line in segments:
+            img = cv2.line(img, (line[0], line[1]), (line[2], line[3]), (255,0,0), 2)
+    except KeyError:
+        pass
+    return img
+
+def draw_it(result):
+    base = result["original"]
+    if len(base.shape) != 3:
+        base = cv2.cvtColor(base, cv2.COLOR_GRAY2RGB)
+    try:
+        base = draw_segments(base, result["segments"])
+    except KeyError:
+        pass
+    try:
+        for line in result["clustered_lines"][2:]:
+            p1 = (line[0], line[1])
+            p2 = (line[2], line[3])
+            base = cv2.line(base, p1, p2, (0,0,255), 2)
+        for line in result["clustered_lines"][:2]:
+            p1 = (line[0], line[1])
+            p2 = (line[2], line[3])
+            base = cv2.line(base, p1, p2, (0,255,0), 2)
+    except KeyError:
+        pass
+    try:
+        line = result["intersections"][2]
+        p1 = (line[0], line[1])
+        p2 = (line[2], line[3])
+        base = cv2.line(base, p1, p2, (50,50,50), 2)
+        base = cv2.circle(base, result["intersections"][0], 5, (255,0,255), -1)
+        base = cv2.circle(base, result["intersections"][1], 5, (255,0,255), -1)
+        base = cv2.circle(base, result["center"], 10, (255,255,0), -1)
+        draw_direction(base, result["center"])
+    except KeyError:
+        pass
+    return base
 
 w = int(sys.argv[2])
 h = int(sys.argv[3])
@@ -181,23 +336,30 @@ sys.stderr.write("Resize to: %dx%d\n" % (w,h))
 while True:
     rv, img = cap.read()
     if not rv:
-        time.sleep(0.01)
-        continue
+        break
 
     img = cv2.resize(img, (w, h))
 
-    lines, debug = detect_lane(img)
-    if lines:
-        img = draw_lines(img, lines)
+    result = detect_lane(img)
+    if OUTPUT_MODE == "mask":
+        img = result["mask"]
+    elif OUTPUT_MODE == "masked":
+        img = result["masked"]
+    elif OUTPUT_MODE == "canny":
+        img = result["canny"]
+    elif OUTPUT_MODE == "hough":
+        try:
+            img = draw_segments(result["canny"], result["segments"])
+        except KeyError:
+            img = result["canny"]
     else:
-        img = debug
-    if img is not None:
-        if len(img.shape) != 3:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        if sys.stdout.isatty():
-            cv2.imshow('image', img)
-        else:
-            sys.stdout.buffer.write(img.tostring())
+        img = draw_it(result)
+    if len(img.shape) != 3:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    if sys.stdout.isatty():
+        cv2.imshow('image', img)
+    else:
+        sys.stdout.buffer.write(img.tostring())
     if chr(cv2.waitKey(1)) == 'q':
         break
 

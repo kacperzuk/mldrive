@@ -1,6 +1,5 @@
 while true; do
     mosquitto_pub -t device_beacon -m 1
-    mosquitto_pub -t 1/camera_stream/0 -m http://127.0.0.1:8090/0.webm
     mosquitto_pub -t 1/telemetry/accelX -m 12.3
     mosquitto_pub -t 1/telemetry/accelY -m 12.3
     mosquitto_pub -t 1/telemetry/accelZ -m 970

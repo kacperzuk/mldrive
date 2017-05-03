@@ -48,7 +48,7 @@ class DeviceConfig extends Component {
               this.props.setConf("vision/canny/high", event.target.value);
             }}/>
         </div>
-      <div>
+        <div>
           <TextField
             className="smallcontrol"
             type="number"
@@ -72,6 +72,24 @@ class DeviceConfig extends Component {
             value={this.props.device["conf/vision/hough/max_gap"] || ""}
             onChange={(event) => {
               this.props.setConf("vision/hough/max_gap", event.target.value);
+            }}/>
+        </div>
+        <div>
+          <TextField
+            className="smallcontrol"
+            type="number"
+            floatingLabelText="Lane detect height"
+            value={this.props.device["conf/vision/lane_detect_height"] || ""}
+            onChange={(event) => {
+              this.props.setConf("vision/lane_detect_height", event.target.value);
+            }}/>
+          <TextField
+            className="smallcontrol"
+            type="number"
+            floatingLabelText="Line merge angle (degrees)"
+            value={this.props.device["conf/vision/line_merge_angle"] || ""}
+            onChange={(event) => {
+              this.props.setConf("vision/line_merge_angle", event.target.value);
             }}/>
         </div>
         <h2>Vehicle</h2>

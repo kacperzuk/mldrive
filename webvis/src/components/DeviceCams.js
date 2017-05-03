@@ -8,7 +8,7 @@ class DeviceCams extends Component {
       this.socket.close();
     }
     this.player = new jsmpeglive({canvas: ref});
-    this.socket = new WebSocket("ws://127.0.0.1:8084/");
+    this.socket = new WebSocket(this.props.device["camera_stream/0"]);
     this.socket.addEventListener('message', (event) => {
       const reader = new FileReader();
       reader.addEventListener("loadend", () => {
@@ -26,6 +26,7 @@ class DeviceCams extends Component {
     return prevProps.device["camera_stream/0"] !== this.props.device["camera_stream/0"];
   }
   render() {
+
     if(!this.props.device["camera_stream/0"]) {
       return null;
     }
