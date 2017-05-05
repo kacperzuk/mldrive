@@ -30,6 +30,8 @@ def on_message(client, userdata, message):
     global HOUGH_MIN_LENGTH
     global HOUGH_INTERSECTIONS
     global LANE_DETECT_HEIGHT
+    global LINE_MERGE_DISTANCE
+    global LINE_SMOOTHING
 
     topic = message.topic.split("/")[3:]
     if topic[0] == "canny":
@@ -66,6 +68,10 @@ def on_message(client, userdata, message):
         LINE_MERGE_DISTANCE = int(message.payload)
         sys.stderr.write("LINE_MERGE_DISTANCE=%d\n" % LINE_MERGE_DISTANCE)
         return
+    elif topic[0] == "line_smoothing":
+        LINE_SMOOTHING = int(message.payload)
+        sys.stderr.write("LINE_SMOOTHING=%d\n" % LINE_SMOOTHING)
+        return
     sys.stderr.write("Unhandled MQTT topic: %s\n" % "/".join(topic))
 
 def on_connect(client, userdata, flags, rc):
@@ -78,16 +84,6 @@ mqttc.connect_async("127.0.0.1", port=1883)
 mqttc.loop_start()
 
 def dump_conf(mqttc):
-    global CANNY_LOW_THRESHOLD
-    global CANNY_HIGH_THRESHOLD
-    global OUTPUT_MODE
-    global HOUGH_MAX_GAP
-    global HOUGH_MIN_LENGTH
-    global HOUGH_INTERSECTIONS
-    global LANE_DETECT_HEIGHT
-    global LINE_MERGE_DISTANCE
-    global DEVICE_ID
-
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
         mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://192.168.2.237:8084")
@@ -99,6 +95,7 @@ def dump_conf(mqttc):
         mqttc.publish("%s/output_mode" % prefix, OUTPUT_MODE)
         mqttc.publish("%s/lane_detect_height" % prefix, LANE_DETECT_HEIGHT)
         mqttc.publish("%s/line_merge_distance" % prefix, LINE_MERGE_DISTANCE)
+        mqttc.publish("%s/line_smoothing" % prefix, LINE_SMOOTHING)
         time.sleep(1)
 
 Thread(target=dump_conf, args=(mqttc,)).start()
@@ -265,8 +262,6 @@ def draw_it(result, lane):
 yoff = 0
 def estimate_speed(prev, cur):
     global yoff
-    global mqttc
-    global DEVICE_ID
     # Convert images to grayscale
     s = (64, 48)
     im1_gray = cv2.resize(cv2.cvtColor(prev,cv2.COLOR_BGR2GRAY), s)
@@ -304,8 +299,13 @@ sys.stderr.write("Resize to: %dx%d\n" % (w,h))
 prevFrame = None
 l1 = [0,0,0,0]
 l2 = [0,0,0,0]
+t = Thread()
+tfps = 0
+pfps = 0
 while True:
+    tstart = time.time()
     rv, img = cap.read()
+    pstart = time.time()
     if img is None:
         break
 
@@ -348,10 +348,16 @@ while True:
         cv2.imshow('image', img)
     else:
         sys.stdout.buffer.write(img.tostring())
-    if prevFrame is not None and False:
-        estimate_speed(prevFrame, result["original"])
+    if prevFrame is not None and not t.is_alive():
+        t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))
+        t.start()
     prevFrame = result["original"]
     if chr(cv2.waitKey(1)) == 'q':
         break
+    tfps = 0.9*tfps + 0.1/(time.time() - tstart)
+    pfps = 0.9*pfps + 0.1/(time.time() - pstart)
+    print((int(tfps),int(pfps)))
+    mqttc.publish("%s/telemetry/vision/fps" % DEVICE_ID, int(tfps))
+    mqttc.publish("%s/telemetry/vision/processing_fps" % DEVICE_ID, int(pfps))
 
 cv2.destroyAllWindows()
