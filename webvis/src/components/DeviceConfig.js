@@ -86,10 +86,21 @@ class DeviceConfig extends Component {
           <TextField
             className="smallcontrol"
             type="number"
-            floatingLabelText="Line merge angle (degrees)"
-            value={this.props.device["conf/vision/line_merge_angle"] || ""}
+            floatingLabelText="Line merge distance"
+            value={this.props.device["conf/vision/line_merge_distance"] || ""}
             onChange={(event) => {
-              this.props.setConf("vision/line_merge_angle", event.target.value);
+              this.props.setConf("vision/line_merge_distance", event.target.value);
+            }}/>
+          <TextField
+            className="smallcontrol"
+            type="number"
+            min="0.1"
+            max="0.99"
+            step="0.05"
+            floatingLabelText="Line smoothing"
+            value={this.props.device["conf/vision/line_smoothing"] || ""}
+            onChange={(event) => {
+              this.props.setConf("vision/line_smoothing", parseFloat(event.target.value));
             }}/>
         </div>
         <h2>Vehicle</h2>

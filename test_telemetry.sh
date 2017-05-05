@@ -15,8 +15,6 @@ while true; do
     mosquitto_pub -t 1/telemetry/voltage/3v3bus -m 3400
     mosquitto_pub -t 1/telemetry/voltage/vcc -m 5100
     mosquitto_pub -t 1/telemetry/temperature/ambient -m 20.7
-    mosquitto_pub -t 1/telemetry/temperature/motor -m 10.3
-    mosquitto_pub -t 1/telemetry/temperature/esc -m 30.1
-    mosquitto_pub -t 1/telemetry/temperature/battery -m 40.5
+    mosquitto_pub -t 1/telemetry/temperature/engine -m 10.3
     sleep 1
 done

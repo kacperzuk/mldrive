@@ -126,7 +126,7 @@ class Device extends Component {
     const unit = "";
     const misc = [
       {
-        name: "Speed",
+        name: "Gear",
         value: this.props.device["speed"],
         dangerAbove: Infinity,
         warningAbove: Infinity,
@@ -149,6 +149,33 @@ class Device extends Component {
     ];
     return this.getRow(misc);
   }
+  getVision() {
+    const unit = "";
+    const misc = [
+      {
+        name: "Vision speed",
+        value: parseFloat(this.props.device["vision/speed"]).toFixed(2),
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
+        unit
+      },
+      {
+        name: "Vision FPS",
+        value: parseFloat(this.props.device["vision/fps"]).toFixed(0),
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
+        unit
+      },
+      {
+        name: "Vision Processing FPS",
+        value: parseFloat(this.props.device["vision/processing_fps"]).toFixed(0),
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
+        unit
+      },
+    ];
+    return this.getRow(misc);
+  }
   render() {
     if(!this.props.device) {
       return null;
@@ -161,6 +188,7 @@ class Device extends Component {
         {this.getTemps()}
         {this.getAccels()}
         {this.getMisc()}
+        {this.getVision()}
       <h1>Config</h1>
         <DeviceConfig device={this.props.device} />
       <h1>Cams</h1>

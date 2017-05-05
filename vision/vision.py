@@ -9,6 +9,7 @@ from utils import *
 
 # must be odd number:
 DEVICE_ID=sys.argv[1]
+MY_IP=sys.argv[4]
 CANNY_LOW_THRESHOLD=150
 CANNY_HIGH_THRESHOLD=200
 HOUGH_INTERSECTIONS=40
@@ -69,8 +70,8 @@ def on_message(client, userdata, message):
         sys.stderr.write("LINE_MERGE_DISTANCE=%d\n" % LINE_MERGE_DISTANCE)
         return
     elif topic[0] == "line_smoothing":
-        LINE_SMOOTHING = int(message.payload)
-        sys.stderr.write("LINE_SMOOTHING=%d\n" % LINE_SMOOTHING)
+        LINE_SMOOTHING = float(message.payload)
+        sys.stderr.write("LINE_SMOOTHING=%f\n" % LINE_SMOOTHING)
         return
     sys.stderr.write("Unhandled MQTT topic: %s\n" % "/".join(topic))
 
@@ -86,7 +87,7 @@ mqttc.loop_start()
 def dump_conf(mqttc):
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
-        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://192.168.2.237:8084")
+        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://%s:8084" % MY_IP)
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
@@ -302,6 +303,7 @@ l2 = [0,0,0,0]
 t = Thread()
 tfps = 0
 pfps = 0
+pshape = None
 while True:
     tstart = time.time()
     rv, img = cap.read()
@@ -356,7 +358,6 @@ while True:
         break
     tfps = 0.9*tfps + 0.1/(time.time() - tstart)
     pfps = 0.9*pfps + 0.1/(time.time() - pstart)
-    print((int(tfps),int(pfps)))
     mqttc.publish("%s/telemetry/vision/fps" % DEVICE_ID, int(tfps))
     mqttc.publish("%s/telemetry/vision/processing_fps" % DEVICE_ID, int(pfps))
 
