@@ -8,11 +8,11 @@ from threading import Thread
 
 # must be odd number:
 DEVICE_ID=sys.argv[1]
-CANNY_LOW_THRESHOLD=100
-CANNY_HIGH_THRESHOLD=150
-HOUGH_INTERSECTIONS=20
-HOUGH_MIN_LENGTH=30
-HOUGH_MAX_GAP=100
+CANNY_LOW_THRESHOLD=150
+CANNY_HIGH_THRESHOLD=200
+HOUGH_INTERSECTIONS=40
+HOUGH_MIN_LENGTH=70
+HOUGH_MAX_GAP=40
 # possible: mask, masked, canny, hough, final
 OUTPUT_MODE="final"
 LANE_DETECT_HEIGHT=150
@@ -132,9 +132,12 @@ def segment_to_hesse_normal_form(segment):
 def intersection_point(l1, l2):
     A,B,C = l1
     D,E,F = l2
-    if A != 0 and (E - D*B/A) != 0:
-        y = (D*C/A - F)/(E - D*B/A)
-        x = -(B*y + C)/A
+    if A != 0:
+        if (E - D*B/A) != 0:
+            y = (D*C/A - F)/(E - D*B/A)
+            x = -(B*y + C)/A
+        else:
+            return None
     elif (D - E*A/B) != 0:
         x = (E*C/B - F)/(D - E*A/B)
         y = -(C + A*x)/B
@@ -209,6 +212,27 @@ def generate_mask(img):
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
     return mask
 
+def avg_line_distance(shape, a, b):
+    h = img.shape[0]
+    w = img.shape[1]
+    hdists = []
+    for h in ( 0, h/2, h ):
+        p1 = intersection_point(a, [0, 1, -h])
+        p2 = intersection_point(b, [0, 1, -h])
+        if p1 is None or p2 is None:
+            hdists.append(math.inf)
+        else:
+            hdists.append(abs(p1[0]-p2[0]))
+    wdists = []
+    for w in ( 0, w/2, w ):
+        p1 = intersection_point(a, [1, 0, -w])
+        p2 = intersection_point(b, [1, 0, -w])
+        if p1 is None or p2 is None:
+            wdists.append(math.inf)
+        else:
+            wdists.append(abs(p1[1]-p2[1]))
+    return min(sum(wdists)/len(wdists), sum(hdists)/len(hdists))
+
 def detect_lane(img):
     result = {
         "original": img.copy()
@@ -239,12 +263,42 @@ def detect_lane(img):
 
     if len(lines) > 2:
         # merge similar lines using kmeans clustering
+        k = min(5, len(lines))
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
-        compactness,labels,lines = cv2.kmeans(np.float32(lines),min(2,len(lines)),None,criteria,10,flags)
+        compactness,labels,lines = cv2.kmeans(np.float32(lines),k,None,criteria,10,flags)
     else:
         return result
 
+    lines = lines.tolist()
+    found = True
+    while found:
+        found = False
+        for a in lines:
+            ah = segment_to_hesse_normal_form(a)
+            if ah is None:
+                lines.remove(a)
+                continue
+            for b in lines:
+                if a == b:
+                    continue
+                if b not in lines:
+                    continue
+                if a not in lines:
+                    break
+                bh = segment_to_hesse_normal_form(b)
+                if bh is None:
+                    lines.remove(b)
+                    continue
+                d = avg_line_distance(img.shape, ah, bh)
+                if (d < 70):
+                    found = True
+                    c = [ (a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2, (a[3]+b[3])/2 ]
+                    lines.remove(a)
+                    lines.remove(b)
+                    lines.append(c)
+
+    lines = np.float32(lines)
     # we prefer vertical lines
     lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
     result["clustered_lines"] = lines
@@ -306,7 +360,7 @@ def get_offset(shape, center):
     mqttc.publish("%s/telemetry/vision/center_offset" % DEVICE_ID, c-x)
 
 
-def draw_it(result):
+def draw_it(result, lane):
     base = result["original"]
     if len(base.shape) != 3:
         base = cv2.cvtColor(base, cv2.COLOR_GRAY2RGB)
@@ -318,8 +372,8 @@ def draw_it(result):
         for line in result["clustered_lines"][2:]:
             p1 = (line[0], line[1])
             p2 = (line[2], line[3])
-            base = cv2.line(base, p1, p2, (0,0,255), 2)
-        for line in result["clustered_lines"][:2]:
+            base = cv2.line(base, p1, p2, (0,0,155), 2)
+        for line in lane:
             p1 = (line[0], line[1])
             p2 = (line[2], line[3])
             base = cv2.line(base, p1, p2, (0,255,0), 2)
@@ -338,6 +392,35 @@ def draw_it(result):
         pass
     return base
 
+yoff = 0
+def estimate_speed(prev, cur):
+    global yoff
+    global mqttc
+    global DEVICE_ID
+    # Convert images to grayscale
+    s = (64, 48)
+    im1_gray = cv2.resize(cv2.cvtColor(prev,cv2.COLOR_BGR2GRAY), s)
+    im2_gray = cv2.resize(cv2.cvtColor(cur,cv2.COLOR_BGR2GRAY), s)
+     
+    # Find size of image1
+    sz = im1_gray.shape
+     
+    # Define the motion model
+    #warp_mode = cv2.MOTION_AFFINE
+    warp_mode = cv2.MOTION_TRANSLATION
+    warp_matrix = np.eye(2, 3, dtype=np.float32)
+    number_of_iterations = 2;
+    criteria = (cv2.TERM_CRITERIA_COUNT, number_of_iterations, 0)
+    try:
+        (cc, warp_matrix) = cv2.findTransformECC (im1_gray,im2_gray,warp_matrix, warp_mode, criteria)
+    except cv2.error:
+        return
+     
+    s = math.sqrt(math.pow(warp_matrix[0][2], 2) + math.pow(warp_matrix[1][2], 2))
+    lpf = 0.8
+    yoff = lpf*yoff + (1-lpf)*s
+    mqttc.publish("%s/telemetry/vision/speed" % DEVICE_ID, yoff)
+
 w = int(sys.argv[2])
 h = int(sys.argv[3])
 
@@ -348,15 +431,32 @@ if not cap.isOpened():
 rv, img = cap.read()
 sys.stderr.write("Frame size: %dx%d\n" % (img.shape[1], img.shape[0]))
 sys.stderr.write("Resize to: %dx%d\n" % (w,h))
+prevFrame = None
+l1 = [0,0,0,0]
+l2 = [0,0,0,0]
 while True:
     rv, img = cap.read()
-    if not rv:
+    if img is None:
         break
 
     img = cv2.resize(img, (w, h))
 
     result = detect_lane(img)
-    if OUTPUT_MODE == "mask":
+    try:
+        if len(result["clustered_lines"]) > 1:
+            s = 0.8
+            la = result["clustered_lines"][0]
+            lb = result["clustered_lines"][1]
+            if (la[0] > lb[0]):
+                la = result["clustered_lines"][1]
+                lb = result["clustered_lines"][0]
+            l1 = [ int(s*l1[i]+(1-s)*la[i]) for i in range(4) ]
+            l2 = [ int(s*l2[i]+(1-s)*lb[i]) for i in range(4) ]
+    except KeyError:
+        pass
+    if OUTPUT_MODE == "original":
+        img = result["original"]
+    elif OUTPUT_MODE == "mask":
         img = result["mask"]
     elif OUTPUT_MODE == "masked":
         img = result["masked"]
@@ -368,7 +468,7 @@ while True:
         except KeyError:
             img = result["canny"]
     else:
-        img = draw_it(result)
+        img = draw_it(result, (l1,l2))
     try:
         get_offset(img.shape, result["center"])
     except KeyError:
@@ -379,6 +479,9 @@ while True:
         cv2.imshow('image', img)
     else:
         sys.stdout.buffer.write(img.tostring())
+    if prevFrame is not None and False:
+        estimate_speed(prevFrame, result["original"])
+    prevFrame = result["original"]
     if chr(cv2.waitKey(1)) == 'q':
         break
 
