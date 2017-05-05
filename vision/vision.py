@@ -8,16 +8,15 @@ from threading import Thread
 
 # must be odd number:
 DEVICE_ID=sys.argv[1]
-CANNY_LOW_THRESHOLD=150
-CANNY_HIGH_THRESHOLD=200
+CANNY_LOW_THRESHOLD=100
+CANNY_HIGH_THRESHOLD=150
 HOUGH_INTERSECTIONS=20
 HOUGH_MIN_LENGTH=30
 HOUGH_MAX_GAP=100
 # possible: mask, masked, canny, hough, final
 OUTPUT_MODE="final"
-# FIXME: add to MQTT
 LANE_DETECT_HEIGHT=150
-LINE_MERGE_ANGLE_DEGREES=10
+LINE_MERGE_ANGLE_DEGREES=30
 
 mqttc = mqtt.Client()
 
@@ -89,7 +88,7 @@ def dump_conf(mqttc):
 
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
-        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://127.0.0.1:8084")
+        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://192.168.2.237:8084")
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
@@ -118,7 +117,7 @@ def segment_to_hesse_normal_form(segment):
         B = 1
         C = q*(w-t)/(q-r) - w
     else:
-        raise Exception("Same points")
+        return None
 
     u = math.sqrt(A*A+B*B)
     if C > 0:
@@ -195,11 +194,17 @@ def generate_mask(img):
     #  [0.8*w, 0.5*h]
     #], np.int32)
     # front angled
+    #vertices = np.array([
+    #  [0.0*w, 0.7*h],
+    #  [0.2*w, 0.2*h],
+    #  [0.9*w, 0.1*h],
+    #  [1.0*w, 0.7*h]
+    #], np.int32)
     vertices = np.array([
-      [0.0*w, 0.7*h],
-      [0.2*w, 0.2*h],
-      [0.9*w, 0.1*h],
-      [1.0*w, 0.7*h]
+      [0.0*w, 0.75*h],
+      [0.1*w, 0.2*h],
+      [0.9*w, 0.2*h],
+      [1.0*w, 0.75*h]
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
     return mask
@@ -236,7 +241,7 @@ def detect_lane(img):
         # merge similar lines using kmeans clustering
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
-        compactness,labels,lines = cv2.kmeans(np.float32(lines),3,None,criteria,10,flags)
+        compactness,labels,lines = cv2.kmeans(np.float32(lines),min(2,len(lines)),None,criteria,10,flags)
     else:
         return result
 
@@ -254,11 +259,12 @@ def detect_lane(img):
 
         l1 = segment_to_hesse_normal_form(l1)
         l2 = segment_to_hesse_normal_form(l2)
-        p1 = intersection_point(l1, h)
-        p2 = intersection_point(l2, h)
-        if p1 is not None and p2 is not None:
-            result["intersections"] = ( p1,p2, line_to_points(h, img.shape))
-            result["center"] = ((p1[0] + p2[0])//2, (p1[1] + p2[1])//2)
+        if l1 is not None and l2 is not None:
+            p1 = intersection_point(l1, h)
+            p2 = intersection_point(l2, h)
+            if p1 is not None and p2 is not None:
+                result["intersections"] = ( p1,p2, line_to_points(h, img.shape))
+                result["center"] = ((p1[0] + p2[0])//2, (p1[1] + p2[1])//2)
     return result
 
 def draw_direction(img, center):
@@ -290,6 +296,15 @@ def draw_segments(img, segments):
     except KeyError:
         pass
     return img
+
+def get_offset(shape, center):
+    global mqttc
+    global DEVICE_ID
+
+    c = img.shape[1]//2
+    x = center[0]
+    mqttc.publish("%s/telemetry/vision/center_offset" % DEVICE_ID, c-x)
+
 
 def draw_it(result):
     base = result["original"]
@@ -354,6 +369,10 @@ while True:
             img = result["canny"]
     else:
         img = draw_it(result)
+    try:
+        get_offset(img.shape, result["center"])
+    except KeyError:
+        pass
     if len(img.shape) != 3:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     if sys.stdout.isatty():
