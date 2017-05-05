@@ -23,6 +23,7 @@ class DeviceConfig extends Component {
             onChange={(event,index,value) => {
               this.props.setConf("vision/output_mode", value);
             }}>
+            <MenuItem value="original" primaryText="Original" />
             <MenuItem value="mask" primaryText="Area of interest mask" />
             <MenuItem value="masked" primaryText="Masked image" />
             <MenuItem value="canny" primaryText="Canny edge detection" />

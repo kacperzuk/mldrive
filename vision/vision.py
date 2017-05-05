@@ -4,6 +4,7 @@ import math
 import time
 import cv2
 import paho.mqtt.client as mqtt
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 from utils import *
 
@@ -19,7 +20,23 @@ HOUGH_MAX_GAP=40
 OUTPUT_MODE="final"
 LANE_DETECT_HEIGHT=150
 LINE_MERGE_DISTANCE=70
-LINE_SMOOTHING=0.7
+LINE_SMOOTHING=0.9
+
+class Stream(BaseHTTPRequestHandler):
+    img = None
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type','image/png')
+        self.end_headers()
+        if Stream.img is not None:
+            self.wfile.write(cv2.imencode('.jpg', Stream.img)[1].tostring())
+
+def http_start():
+    server_address = ('127.0.0.1', 8081)
+    httpd = HTTPServer(server_address, Stream)
+    httpd.serve_forever()
+
+Thread(target=http_start).start()
 
 mqttc = mqtt.Client()
 
@@ -87,7 +104,7 @@ mqttc.loop_start()
 def dump_conf(mqttc):
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
-        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "ws://%s:8084" % MY_IP)
+        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "http://%s:8081" % MY_IP)
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
@@ -131,7 +148,7 @@ def detect_lane(img):
 
     if len(lines) > 2:
         # merge similar lines using kmeans clustering
-        k = min(5, len(lines))
+        k = min(7, len(lines))
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
         compactness,labels,lines = cv2.kmeans(np.float32(lines),k,None,criteria,10,flags)
@@ -170,23 +187,6 @@ def detect_lane(img):
     # we prefer vertical lines
     lines = sorted(lines, key=lambda l: abs(l[0] - l[2]))
     result["clustered_lines"] = lines
-    if len(lines) > 1:
-        h = (0,1,-LANE_DETECT_HEIGHT)
-        l1 = lines[0]
-        l2 = lines[1]
-        # make sure the first line is the left one
-        if l1[0] > l2[0]:
-            l1 = lines[1]
-            l2 = lines[0]
-
-        l1 = segment_to_hesse_normal_form(l1)
-        l2 = segment_to_hesse_normal_form(l2)
-        if l1 is not None and l2 is not None:
-            p1 = intersection_point(l1, h)
-            p2 = intersection_point(l2, h)
-            if p1 is not None and p2 is not None:
-                result["intersections"] = ( p1,p2, line_to_points(h, img.shape))
-                result["center"] = ((p1[0] + p2[0])//2, (p1[1] + p2[1])//2)
     return result
 
 def draw_direction(img, center):
@@ -287,6 +287,23 @@ def estimate_speed(prev, cur):
     yoff = lpf*yoff + (1-lpf)*s
     mqttc.publish("%s/telemetry/vision/speed" % DEVICE_ID, yoff)
 
+def find_center(result, l1, l2):
+    h = (0,1,-LANE_DETECT_HEIGHT)
+    if l1[0] > l2[0]:
+        t = l1
+        l1 = l2
+        l2 = t
+
+    l1 = segment_to_hesse_normal_form(l1)
+    l2 = segment_to_hesse_normal_form(l2)
+    if l1 is not None and l2 is not None:
+        p1 = intersection_point(l1, h)
+        p2 = intersection_point(l2, h)
+        if p1 is not None and p2 is not None:
+            result["intersections"] = ( p1,p2, line_to_points(h, result["original"].shape))
+            result["center"] = ((p1[0] + p2[0])//2, (p1[1] + p2[1])//2)
+    return result
+
 w = int(sys.argv[2])
 h = int(sys.argv[3])
 
@@ -304,6 +321,7 @@ t = Thread()
 tfps = 0
 pfps = 0
 pshape = None
+#writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
 while True:
     tstart = time.time()
     rv, img = cap.read()
@@ -325,6 +343,7 @@ while True:
             l2 = merge_lines(l2, lb, LINE_SMOOTHING)
     except KeyError:
         pass
+    result = find_center(result, l1, l2)
     if OUTPUT_MODE == "original":
         img = result["original"]
     elif OUTPUT_MODE == "mask":
@@ -346,10 +365,9 @@ while True:
         pass
     if len(img.shape) != 3:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    if sys.stdout.isatty():
-        cv2.imshow('image', img)
-    else:
-        sys.stdout.buffer.write(img.tostring())
+    cv2.imshow('image', img)
+    Stream.img = img
+    #writer.write(img)
     if prevFrame is not None and not t.is_alive():
         t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))
         t.start()

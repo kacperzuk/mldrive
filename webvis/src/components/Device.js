@@ -153,6 +153,13 @@ class Device extends Component {
     const unit = "";
     const misc = [
       {
+        name: "Vision offset",
+        value: parseFloat(this.props.device["vision/center_offset"]).toFixed(0),
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
+        unit
+      },
+      {
         name: "Vision speed",
         value: parseFloat(this.props.device["vision/speed"]).toFixed(2),
         dangerAbove: Infinity,

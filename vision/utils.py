@@ -105,10 +105,10 @@ def generate_mask(img):
     #  [1.0*w, 0.7*h]
     #], np.int32)
     vertices = np.array([
-      [0.0*w, 0.75*h],
-      [0.1*w, 0.2*h],
-      [0.9*w, 0.2*h],
-      [1.0*w, 0.75*h]
+      [0.0*w, 0*h],
+      [0*w, 1*h],
+      [1*w, 1*h],
+      [1*w, 0*h]
     ], np.int32)
     cv2.fillPoly(mask, [vertices], ignore_mask_color)
     return mask
