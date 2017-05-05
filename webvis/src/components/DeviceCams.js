@@ -6,6 +6,11 @@ class DeviceCams extends Component {
     ref.onload = () => {
       this.handleRef(ref);
     };
+    ref.onerror = () => {
+      setTimeout(() => {
+        this.handleRef(ref);
+      }, 500);
+    };
     ref.src = this.props.device["camera_stream/0"] + "?" + Date.now();
   }
   componentWillUnmount() {
