@@ -17,11 +17,7 @@ const mapDispatchToProps = (dispatch, ownProps) => ({
     const device_id = ownProps.device.id;
     Object.keys(ownProps.device).filter((k) => k.indexOf("conf") === 0).forEach((topic) => {
       let val = ownProps.device[topic];
-      if(topic.indexOf("conf/vision/") === 0) {
-        connector.sendOnce(`${device_id}/set${topic}`, val);
-      } else {
-        connector.sendOnce(`${device_id}/${topic}`, val);
-      }
+      connector.sendOnce(`${device_id}/set${topic}`, val);
     });
     dispatch(clearForm(device_id));
   },

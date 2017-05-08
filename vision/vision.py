@@ -11,6 +11,7 @@ from utils import *
 # must be odd number:
 DEVICE_ID=sys.argv[1]
 MY_IP=sys.argv[4]
+MQTT_IP=sys.argv[5]
 CANNY_LOW_THRESHOLD=150
 CANNY_HIGH_THRESHOLD=200
 HOUGH_INTERSECTIONS=40
@@ -32,7 +33,7 @@ class Stream(BaseHTTPRequestHandler):
             self.wfile.write(cv2.imencode('.jpg', Stream.img)[1].tostring())
 
 def http_start():
-    server_address = ('127.0.0.1', 8081)
+    server_address = ('0.0.0.0', 8081)
     httpd = HTTPServer(server_address, Stream)
     httpd.serve_forever()
 
@@ -98,7 +99,7 @@ def on_connect(client, userdata, flags, rc):
 
 mqttc.on_message = on_message
 mqttc.on_connect = on_connect
-mqttc.connect_async("127.0.0.1", port=1883)
+mqttc.connect_async(MQTT_IP, port=1883)
 mqttc.loop_start()
 
 def dump_conf(mqttc):
@@ -365,15 +366,17 @@ while True:
         pass
     if len(img.shape) != 3:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    cv2.imshow('image', img)
+    if sys.stdout.isatty():
+        cv2.imshow('image', img)
     Stream.img = img
     #writer.write(img)
     if prevFrame is not None and not t.is_alive():
         t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))
         t.start()
     prevFrame = result["original"]
-    if chr(cv2.waitKey(1)) == 'q':
-        break
+    if sys.stdout.isatty():
+        if chr(cv2.waitKey(1)) == 'q':
+            break
     tfps = 0.9*tfps + 0.1/(time.time() - tstart)
     pfps = 0.9*pfps + 0.1/(time.time() - pstart)
     mqttc.publish("%s/telemetry/vision/fps" % DEVICE_ID, int(tfps))
