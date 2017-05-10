@@ -146,6 +146,13 @@ class Device extends Component {
         warningAbove: Infinity,
         unit: "°"
       },
+      {
+        name: "Range front",
+        value: parseFloat(this.props.device["rangeFront"]).toFixed(1),
+        dangerAbove: Infinity,
+        warningAbove: Infinity,
+        unit: "cm"
+      },
     ];
     return this.getRow(misc);
   }

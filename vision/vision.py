@@ -1,9 +1,12 @@
 import sys
 import numpy as np
 import math
+import gzip
 import time
+import os
 import cv2
 import paho.mqtt.client as mqtt
+from socketserver import ThreadingMixIn
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 from utils import *
@@ -12,6 +15,8 @@ from utils import *
 DEVICE_ID=sys.argv[1]
 MY_IP=sys.argv[4]
 MQTT_IP=sys.argv[5]
+VIDEO_PORT=int(os.getenv("VIDEO_PORT", 7000))
+HTTP_PORT=int(os.getenv("HTTP_PORT", 8089))
 CANNY_LOW_THRESHOLD=150
 CANNY_HIGH_THRESHOLD=200
 HOUGH_INTERSECTIONS=40
@@ -25,16 +30,28 @@ LINE_SMOOTHING=0.9
 
 class Stream(BaseHTTPRequestHandler):
     img = None
+    protocol_version = 'HTTP/1.1'
     def do_GET(self):
+        if Stream.img is None:
+            self.send_response(404)
+            self.send_header("Content-Length", 0)
+            self.end_headers()
+            return
+        content = cv2.imencode('.jpg', Stream.img, (50,))[1].tostring()
         self.send_response(200)
-        self.send_header('Content-type','image/png')
+        self.send_header("Content-Length", len(content))
+        self.send_header('Content-Type','image/jpg')
         self.end_headers()
-        if Stream.img is not None:
-            self.wfile.write(cv2.imencode('.jpg', Stream.img)[1].tostring())
+        self.wfile.write(content)
+        self.wfile.flush()
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle requests in a separate thread."""
 
 def http_start():
-    server_address = ('0.0.0.0', 8081)
-    httpd = HTTPServer(server_address, Stream)
+    global HTTP_PORT
+    server_address = ('0.0.0.0', HTTP_PORT)
+    httpd = ThreadedHTTPServer(server_address, Stream)
     httpd.serve_forever()
 
 Thread(target=http_start).start()
@@ -105,7 +122,7 @@ mqttc.loop_start()
 def dump_conf(mqttc):
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
-        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "http://%s:8081" % MY_IP)
+        mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "http://%s:%s" % (MY_IP, HTTP_PORT))
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
@@ -308,7 +325,7 @@ def find_center(result, l1, l2):
 w = int(sys.argv[2])
 h = int(sys.argv[3])
 
-cap = cv2.VideoCapture('tcp://0.0.0.0:6000?listen&recv_buffer_size=1024')
+cap = cv2.VideoCapture('tcp://0.0.0.0:%s?listen&recv_buffer_size=1024' % VIDEO_PORT)
 if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
@@ -325,6 +342,7 @@ pshape = None
 #writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
 while True:
     tstart = time.time()
+    rv, img = cap.read()
     rv, img = cap.read()
     pstart = time.time()
     if img is None:

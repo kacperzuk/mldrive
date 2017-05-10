@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 
 class DeviceCams extends Component {
   handleRef(ref) {
-    if(this.unmounting) return;
+    if(this.unmounting || !ref) return;
     ref.onload = () => {
       this.handleRef(ref);
     };
