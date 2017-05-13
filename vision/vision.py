@@ -325,7 +325,7 @@ def find_center(result, l1, l2):
 w = int(sys.argv[2])
 h = int(sys.argv[3])
 
-cap = cv2.VideoCapture('tcp://0.0.0.0:%s?listen&recv_buffer_size=1024' % VIDEO_PORT)
+cap = cv2.VideoCapture('udp://0.0.0.0:%s?listen' % VIDEO_PORT)
 if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
@@ -342,8 +342,9 @@ pshape = None
 #writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
 while True:
     tstart = time.time()
-    rv, img = cap.read()
-    rv, img = cap.read()
+    while time.time() - tstart < 0.01:
+        tstart = time.time()
+        rv, img = cap.read()
     pstart = time.time()
     if img is None:
         break
