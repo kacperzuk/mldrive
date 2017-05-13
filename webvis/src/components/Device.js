@@ -10,38 +10,42 @@ class Device extends Component {
       {
         name: "Cell1",
         value: (parseFloat(this.props.device["voltage/cell1"])/1000).toFixed(2),
-        dangerAbove: 4,
-        warningAbove: 3.9,
-        warningBelow: 3.5,
-        dangerBelow: 3.2,
+        dangerAbove: 4.2,
+        warningAbove: Infinity,
+        warningBelow: 3.75,
+        dangerBelow: 2.7,
         unit
       },
       {
         name: "Cell2",
         value: (parseFloat(this.props.device["voltage/cell2"])/1000).toFixed(2),
         dangerAbove: 4.2,
-        warningAbove: 3.9,
+        warningAbove: Infinity,
+        warningBelow: 3.75,
+        dangerBelow: 2.7,
         unit
       },
       {
         name: "Battery",
         value: (parseFloat(this.props.device["voltage/battery"])/1000).toFixed(2),
         dangerAbove: 2*4.2,
-        warningAbove: 2*3.9,
+        warningAbove: Infinity,
+        warningBelow: 2*3.75,
+        dangerBelow: 2*2.7,
         unit
       },
       {
         name: "3v3 bus",
         value: (parseFloat(this.props.device["voltage/3v3bus"])/1000).toFixed(2),
-        dangerAbove: 4,
-        warningAbove: 3.5,
+        dangerAbove: 3.4,
+        dangerBelow: 3.2,
         unit
       },
       {
         name: "Vcc",
         value: (parseFloat(this.props.device["voltage/vcc"])/1000).toFixed(2),
-        dangerAbove: 6,
-        warningAbove: 5.5,
+        dangerAbove: 5.5,
+        dangerBelow: 4.5,
         unit
       }
     ];
@@ -67,8 +71,10 @@ class Device extends Component {
       {
         name: "Ambient",
         value: (parseFloat(this.props.device["temperature/ambient"])/10).toFixed(1),
-        dangerAbove: 60,
-        warningAbove: 40,
+        dangerAbove: 32,
+        warningAbove: 28,
+        warningBelow: 15,
+        dangerBelow: 5,
         unit
       },
       {
@@ -76,22 +82,10 @@ class Device extends Component {
         value: (parseFloat(this.props.device["temperature/engine"])/10).toFixed(1),
         dangerAbove: 60,
         warningAbove: 40,
+        warningBelow: 5,
+        dangerBelow: 0,
         unit
       },
-      //{
-      //  name: "ESC",
-      //  value: parseFloat(this.props.device["temperature/esc"]).toFixed(1),
-      //  dangerAbove: 60,
-      //  warningAbove: 40,
-      //  unit
-      //},
-      //{
-      //  name: "Battery",
-      //  value: parseFloat(this.props.device["temperature/battery"]).toFixed(1),
-      //  dangerAbove: 60,
-      //  warningAbove: 40,
-      //  unit
-      //},
     ];
     return this.getRow(temps);
   }
@@ -149,8 +143,8 @@ class Device extends Component {
       {
         name: "Range front",
         value: parseFloat(this.props.device["rangeFront"]).toFixed(1),
-        dangerAbove: Infinity,
-        warningAbove: Infinity,
+        dangerBelow: 10,
+        warningBelow: 30,
         unit: "cm"
       },
     ];
