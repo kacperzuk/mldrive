@@ -19,14 +19,14 @@ VIDEO_PORT=int(os.getenv("VIDEO_PORT", 7000))
 HTTP_PORT=int(os.getenv("HTTP_PORT", 8089))
 CANNY_LOW_THRESHOLD=150
 CANNY_HIGH_THRESHOLD=200
-HOUGH_INTERSECTIONS=40
-HOUGH_MIN_LENGTH=70
+HOUGH_INTERSECTIONS=20
+HOUGH_MIN_LENGTH=100
 HOUGH_MAX_GAP=40
 # possible: mask, masked, canny, hough, final
 OUTPUT_MODE="final"
 LANE_DETECT_HEIGHT=150
-LINE_MERGE_DISTANCE=70
-LINE_SMOOTHING=0.9
+LINE_MERGE_DISTANCE=0
+LINE_SMOOTHING=0.1
 
 class Stream(BaseHTTPRequestHandler):
     img = None
@@ -166,7 +166,7 @@ def detect_lane(img):
 
     if len(lines) > 2:
         # merge similar lines using kmeans clustering
-        k = min(7, len(lines))
+        k = min(2, len(lines))
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, .5)
         flags = cv2.KMEANS_RANDOM_CENTERS
         compactness,labels,lines = cv2.kmeans(np.float32(lines),k,None,criteria,10,flags)
@@ -339,7 +339,7 @@ t = Thread()
 tfps = 0
 pfps = 0
 pshape = None
-#writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
+writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
 while True:
     tstart = time.time()
     while time.time() - tstart < 0.01:
@@ -388,14 +388,14 @@ while True:
     if sys.stdout.isatty():
         cv2.imshow('image', img)
     Stream.img = img
-    #writer.write(img)
+    writer.write(img)
     if prevFrame is not None and not t.is_alive():
         t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))
         t.start()
     prevFrame = result["original"]
-    if sys.stdout.isatty():
-        if chr(cv2.waitKey(1)) == 'q':
-            break
+    #if sys.stdout.isatty():
+    #    if chr(cv2.waitKey(1)) == 'q':
+    #        break
     tfps = 0.9*tfps + 0.1/(time.time() - tstart)
     pfps = 0.9*pfps + 0.1/(time.time() - pstart)
     mqttc.publish("%s/telemetry/vision/fps" % DEVICE_ID, int(tfps))
