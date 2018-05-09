@@ -1,0 +1,40 @@
+item {
+  name: "speed-limit"
+  id: 1
+}
+item {
+  name: "stop-sign"
+  id: 2
+}
+item {
+  name: "house"
+  id: 3
+}
+item {
+  name: "tree"
+  id: 4
+}
+item {
+  name: "yield-sign"
+  id: 5
+}
+item {
+  name: "trup"
+  id: 6
+}
+item {
+  name: "truch\305\202o"
+  id: 7
+}
+item {
+  name: "human"
+  id: 8
+}
+item {
+  name: "human-on-the-road"
+  id: 9
+}
+item {
+  name: "WTC-09-11-2001"
+  id: 10
+}
