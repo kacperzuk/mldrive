@@ -3,6 +3,8 @@ import numpy as np
 import math
 import gzip
 import time
+import tensorflow as tf
+from object_detection.utils import label_map_util, visualization_utils
 import os
 import cv2
 import paho.mqtt.client as mqtt
@@ -12,11 +14,12 @@ from threading import Thread
 from utils import *
 
 # must be odd number:
+MAX_CLASSES=90
 DEVICE_ID=sys.argv[1]
 MY_IP=sys.argv[4]
 MQTT_IP=sys.argv[5]
 VIDEO_PORT=int(os.getenv("VIDEO_PORT", 7000))
-VIDEO_PROTO=os.getenv("VIDEO_PROTO", "udp")
+VIDEO_PROTO=os.getenv("VIDEO_PROTO", "tcp")
 HTTP_PORT=int(os.getenv("HTTP_PORT", 8089))
 CANNY_LOW_THRESHOLD=300
 CANNY_HIGH_THRESHOLD=500
@@ -29,16 +32,77 @@ LANE_DETECT_HEIGHT=150
 LINE_MERGE_DISTANCE=30
 LINE_SMOOTHING=0.5
 
+
+class ObjectDetectionPredict():
+    def __init__(self, model_path, labels_path):
+        label_map = label_map_util.load_labelmap(labels_path)
+        categories = label_map_util.convert_label_map_to_categories(
+            label_map, max_num_classes=MAX_CLASSES, use_display_name=True)
+        self.category_index = label_map_util.create_category_index(categories)
+        self.load_tf_graph(model_path)
+
+    def load_tf_graph(self, model_path):
+        self.detection_graph = tf.Graph()
+        with self.detection_graph.as_default():
+            od_graph_def = tf.GraphDef()
+            with tf.gfile.GFile(model_path, 'rb') as fid:
+                serialized_graph = fid.read()
+                od_graph_def.ParseFromString(serialized_graph)
+                tf.import_graph_def(od_graph_def, name='')
+
+            self.sess = tf.Session(graph=self.detection_graph)
+        return 0
+
+
+    def detect_objects(self, image_np):
+        # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image_np, axis=0)
+        image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
+
+        # Each box represents a part of the image where a particular object was detected.
+        boxes = self.detection_graph.get_tensor_by_name('detection_boxes:0')
+
+        # Each score represent the level of confidence for each of the objects.
+        # Score is shown on the result image, together with the class label.
+        scores = self.detection_graph.get_tensor_by_name('detection_scores:0')
+        classes = self.detection_graph.get_tensor_by_name('detection_classes:0')
+        num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
+
+        # Actual detection.
+        (boxes, scores, classes, num_detections) = self.sess.run(
+            [boxes, scores, classes, num_detections],
+            feed_dict={image_tensor: image_np_expanded})
+
+        # Visualization of the results of a detection.
+        visualization_utils.visualize_boxes_and_labels_on_image_array(
+            image_np,
+            np.squeeze(boxes),
+            np.squeeze(classes).astype(np.int32),
+            np.squeeze(scores),
+            self.category_index,
+            use_normalized_coordinates=True,
+            line_thickness=8)
+        return scores, classes, image_np
+
 class Stream(BaseHTTPRequestHandler):
     img = None
+    raw_img = None
+    predictor = ObjectDetectionPredict("./frozen_inference_graph.pb", "./label_map.pbtxt")
     protocol_version = 'HTTP/1.1'
+    def log_message(self, format, *args):
+        return
     def do_GET(self):
-        if Stream.img is None:
+        if Stream.img is None or Stream.raw_img is None:
             self.send_response(404)
             self.send_header("Content-Length", 0)
             self.end_headers()
             return
-        content = cv2.imencode('.jpg', Stream.img, (50,))[1].tostring()
+        try:
+            self.path.index("objects")
+            scores, classes, img = Stream.predictor.detect_objects(Stream.raw_img)
+        except ValueError:
+            img = Stream.img
+        content = cv2.imencode('.jpg', img, (50,))[1].tostring()
         self.send_response(200)
         self.send_header("Content-Length", len(content))
         self.send_header('Content-Type','image/jpg')
@@ -124,6 +188,7 @@ def dump_conf(mqttc):
     prefix = "%s/conf/vision" % DEVICE_ID
     while True:
         mqttc.publish("%s/camera_stream/0" % DEVICE_ID, "http://%s:%s" % (MY_IP, HTTP_PORT))
+        mqttc.publish("%s/camera_stream/0/objects" % DEVICE_ID, "http://%s:%s/objects" % (MY_IP, HTTP_PORT))
         mqttc.publish("%s/canny/low" % prefix, CANNY_LOW_THRESHOLD)
         mqttc.publish("%s/canny/high" % prefix, CANNY_HIGH_THRESHOLD)
         mqttc.publish("%s/hough/max_gap" % prefix, HOUGH_MAX_GAP)
@@ -250,7 +315,7 @@ def get_offset(shape, center):
 
 
 def draw_it(result, lane):
-    base = result["original"]
+    base = result["original"].copy()
     if len(base.shape) != 3:
         base = cv2.cvtColor(base, cv2.COLOR_GRAY2RGB)
     try:
@@ -341,7 +406,7 @@ l2 = [0,0,0,0]
 t = Thread()
 tfps = 0
 pfps = 0
-pshape = None
+trshape = None
 writer = cv2.VideoWriter("out.avi", cv2.VideoWriter_fourcc(*'XVID'), 60, (img.shape[1], img.shape[0]))
 while True:
     tstart = time.time()
@@ -391,6 +456,7 @@ while True:
     if sys.stdout.isatty():
         cv2.imshow('image', img)
     Stream.img = img
+    Stream.raw_img = result["original"]
     writer.write(img)
     if prevFrame is not None and not t.is_alive():
         t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))

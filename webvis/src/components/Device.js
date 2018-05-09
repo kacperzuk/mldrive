@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import Gauge from './Gauge';
 import DeviceConfig from '../containers/DeviceConfig';
 import DeviceCams from './DeviceCams';
+import ObjectDetection from './ObjectDetection';
 
 class Device extends Component {
   getVoltages() {
@@ -201,6 +202,8 @@ class Device extends Component {
         <DeviceConfig device={this.props.device} />
       <h1>Cams</h1>
         <DeviceCams device={this.props.device} />
+      <hr/>
+        <ObjectDetection device={this.props.device} />
       <h1>Debug</h1>
         <pre>{JSON.stringify(this.props.device, null, 4)}</pre>
         <pre>{JSON.stringify(this.props.gamepad, null, 4)}</pre>
