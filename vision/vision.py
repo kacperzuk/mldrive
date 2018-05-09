@@ -16,17 +16,18 @@ DEVICE_ID=sys.argv[1]
 MY_IP=sys.argv[4]
 MQTT_IP=sys.argv[5]
 VIDEO_PORT=int(os.getenv("VIDEO_PORT", 7000))
+VIDEO_PROTO=os.getenv("VIDEO_PROTO", "udp")
 HTTP_PORT=int(os.getenv("HTTP_PORT", 8089))
-CANNY_LOW_THRESHOLD=150
-CANNY_HIGH_THRESHOLD=200
-HOUGH_INTERSECTIONS=20
-HOUGH_MIN_LENGTH=100
-HOUGH_MAX_GAP=40
+CANNY_LOW_THRESHOLD=300
+CANNY_HIGH_THRESHOLD=500
+HOUGH_INTERSECTIONS=30
+HOUGH_MIN_LENGTH=50
+HOUGH_MAX_GAP=20
 # possible: mask, masked, canny, hough, final
 OUTPUT_MODE="final"
 LANE_DETECT_HEIGHT=150
-LINE_MERGE_DISTANCE=0
-LINE_SMOOTHING=0.1
+LINE_MERGE_DISTANCE=30
+LINE_SMOOTHING=0.5
 
 class Stream(BaseHTTPRequestHandler):
     img = None
@@ -144,6 +145,8 @@ def detect_lane(img):
     # these algorithms only work with Gray unfortunately
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     result["gray"] = img.copy()
+    kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    img = cv2.filter2D(img, -1, kernel)
 
     mask = generate_mask(img)
     result["mask"] = mask.copy()
@@ -243,7 +246,7 @@ def get_offset(shape, center):
 
     c = img.shape[1]//2
     x = center[0]
-    mqttc.publish("%s/telemetry/vision/center_offset" % DEVICE_ID, c-x)
+    mqttc.publish("%s/telemetry/vision/center_offset" % DEVICE_ID, (c-x))
 
 
 def draw_it(result, lane):
@@ -325,7 +328,7 @@ def find_center(result, l1, l2):
 w = int(sys.argv[2])
 h = int(sys.argv[3])
 
-cap = cv2.VideoCapture('udp://0.0.0.0:%s?listen' % VIDEO_PORT)
+cap = cv2.VideoCapture('%s://0.0.0.0:%s?listen' % (VIDEO_PROTO, VIDEO_PORT))
 if not cap.isOpened():
     raise Exception("Couldn't open cam!")
 
@@ -393,9 +396,9 @@ while True:
         t = Thread(target=estimate_speed, args=(prevFrame, result["original"]))
         t.start()
     prevFrame = result["original"]
-    #if sys.stdout.isatty():
-    #    if chr(cv2.waitKey(1)) == 'q':
-    #        break
+    if sys.stdout.isatty():
+        if chr(cv2.waitKey(1) & 0xFF) == 'q':
+            break
     tfps = 0.9*tfps + 0.1/(time.time() - tstart)
     pfps = 0.9*pfps + 0.1/(time.time() - pstart)
     mqttc.publish("%s/telemetry/vision/fps" % DEVICE_ID, int(tfps))
